@@ -15,16 +15,30 @@ import java.util.concurrent.atomic.AtomicLong
  */
 internal class ClipboardEventGeneration {
     private val latest = AtomicLong(0L)
+    private var lastAppliedExternalMedia: ClipboardExternalMediaSource? = null
 
     fun next(): Long = synchronized(this) { latest.incrementAndGet() }
     fun isCurrent(epoch: Long): Boolean = latest.get() == epoch
 
-    /** Atomically compare the generation and apply a short local state update. */
-    fun applyIfCurrent(epoch: Long, update: () -> Unit): Boolean = synchronized(this) {
-        if (latest.get() != epoch) {
-            false
-        } else {
+    /** An explicit internal clipboard update supersedes any pending external callback. */
+    fun invalidatePending() = synchronized(this) {
+        latest.incrementAndGet()
+        lastAppliedExternalMedia = null
+    }
+
+    /** Cache identity only after successful application, never while work is pending. */
+    fun wasAppliedExternalMediaSource(key: ClipboardExternalMediaSource): Boolean =
+        synchronized(this) { lastAppliedExternalMedia == key }
+
+    /** Atomically compare, commit and mark applied source. */
+    fun applyIfCurrent(
+        epoch: Long,
+        mediaSource: ClipboardExternalMediaSource? = null,
+        update: () -> Unit,
+    ): Boolean = synchronized(this) {
+        if (latest.get() != epoch) false else {
             update()
+            lastAppliedExternalMedia = mediaSource
             true
         }
     }
@@ -48,4 +62,26 @@ internal object ClipboardRetentionPolicy {
 internal object ClipboardCapturePolicy {
     fun ownsNewClone(isMedia: Boolean, originalAuthority: String?, ownProviderAuthority: String): Boolean =
         isMedia && originalAuthority != null && originalAuthority != ownProviderAuthority
+
+    fun externalMediaSource(
+        sourceUri: String?,
+        sourceAuthority: String?,
+        timestampMs: Long,
+        mimeTypes: List<String>,
+        ownProviderAuthority: String,
+    ): ClipboardExternalMediaSource? {
+        if (sourceUri.isNullOrBlank() || sourceAuthority == ownProviderAuthority) return null
+        if (mimeTypes.none { it.startsWith("image/") || it.startsWith("video/") }) return null
+        return ClipboardExternalMediaSource(sourceUri, timestampMs, mimeTypes)
+    }
 }
+
+/**
+ * Source URI, MIME and setPrimaryClip timestamp uniquely identify one external
+ * media clipboard event without retaining the media bytes or text.
+ */
+internal data class ClipboardExternalMediaSource(
+    val uri: String,
+    val timestampMs: Long,
+    val mimeTypes: List<String>,
+)
