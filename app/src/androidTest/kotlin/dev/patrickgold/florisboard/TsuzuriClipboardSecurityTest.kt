@@ -5,6 +5,9 @@
 package dev.patrickgold.florisboard
 
 import android.content.ContentUris
+import android.content.ClipData
+import android.os.PersistableBundle
+import dev.patrickgold.florisboard.ime.clipboard.ClipboardRetentionPolicy
 import android.net.Uri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -98,6 +101,28 @@ class TsuzuriClipboardSecurityTest {
         } finally {
             sourceDir.deleteRecursively()
         }
+    }
+
+    @Test
+    fun sensitiveBorrowedMediaNeverDeletesOrReadsItsOriginalSource() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val testContext = instrumentation.context
+        val providerUri = Uri.parse(
+            "content://" + testContext.packageName + ".test-source/picture/non-numeric",
+        )
+        testContext.contentResolver.call(providerUri, "reset", null, null)
+        val clip = ClipData.newUri(testContext.contentResolver, "private test media", providerUri)
+        clip.description.extras = PersistableBundle().apply {
+            putBoolean(ClipboardRetentionPolicy.SENSITIVE_EXTRA, true)
+        }
+        val item = ClipboardItem.fromClipData(context, clip, cloneUri = false)
+        assertTrue(item.isSensitive)
+        assertEquals(providerUri, item.uri)
+        // The production close() path is only allowed to delete own-provider URIs.
+        item.close(context)
+        val counts = testContext.contentResolver.call(providerUri, "counts", null, null)
+        assertEquals(0, counts?.getInt("delete"))
+        assertEquals(0, counts?.getInt("read"))
     }
 
     @Test
