@@ -26,5 +26,7 @@ internal class ClipboardEventGeneration {
  * The rule applies even when a user disables expiry or pins a clip.
  */
 internal object ClipboardRetentionPolicy {
+    const val SENSITIVE_EXTRA = "android.content.extra.IS_SENSITIVE"
+
     fun shouldPersist(isSensitive: Boolean): Boolean = !isSensitive
 }

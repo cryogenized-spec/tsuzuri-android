@@ -46,6 +46,10 @@ class ClipboardEventGenerationTest : FunSpec({
         }
     }
 
+    test("sensitive flag key applies across Android API versions") {
+        ClipboardRetentionPolicy.SENSITIVE_EXTRA shouldBe "android.content.extra.IS_SENSITIVE"
+    }
+
     test("sensitive data is not eligible for persistent clipboard history") {
         ClipboardRetentionPolicy.shouldPersist(isSensitive = true) shouldBe false
         ClipboardRetentionPolicy.shouldPersist(isSensitive = false) shouldBe true
