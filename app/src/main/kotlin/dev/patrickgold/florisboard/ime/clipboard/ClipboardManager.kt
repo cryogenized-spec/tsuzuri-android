@@ -182,6 +182,8 @@ class ClipboardManager(
      * Sets the current primary clip without updating the internal clipboard history.
      */
     fun updatePrimaryClip(item: ClipboardItem?) {
+        // Internal updates supersede any pending external clipboard callback.
+        clipboardEventGeneration.invalidatePending()
         primaryClip = item
         if (prefs.clipboard.useInternalClipboard.get()) {
             val syncBehavior = prefs.clipboard.syncToSystem.get()
@@ -226,6 +228,7 @@ class ClipboardManager(
                 }
 
                 if (!syncBehavior.shouldSyncSet) {
+                    clipboardEventGeneration.applyIfCurrent(callbackGeneration) { /* no import */ }
                     return@launch
                 }
 
@@ -234,8 +237,32 @@ class ClipboardManager(
                 val isEqual = internalPrimaryClip?.isEqualTo(systemPrimaryClip) == true &&
                     internalPrimaryClip.isSensitive == incomingSensitive
                 if (!isEqual) {
-                    val item = ClipboardItem.fromClipData(appContext, systemPrimaryClip, cloneUri = true)
-                    val applied = clipboardEventGeneration.applyIfCurrent(callbackGeneration) {
+                    val mediaSource = if (incomingSensitive) null else {
+                        val incomingItem = systemPrimaryClip.getItemAt(0)
+                        val formats = List(systemPrimaryClip.description.mimeTypeCount) {
+                            systemPrimaryClip.description.getMimeType(it)
+                        }
+                        ClipboardCapturePolicy.externalMediaSource(
+                            sourceUri = incomingItem.uri?.toString(),
+                            sourceAuthority = incomingItem.uri?.authority,
+                            timestampMs = systemPrimaryClip.description.timestamp,
+                            mimeTypes = formats,
+                            ownProviderAuthority = ClipboardMediaProvider.AUTHORITY,
+                        )
+                    }
+
+                    // A callback can repeat before the first copy has been committed.
+                    // Never suppress pending work: deduplicate only committed sources.
+                    if (mediaSource != null &&
+                        clipboardEventGeneration.wasAppliedExternalMediaSource(mediaSource)
+                    ) return@launch
+
+                    // IMPORTANT: cloning writes bytes to app-private disk before the
+                    // history filter. Sensitive media must stay as a borrowed URI.
+                    val item = ClipboardItem.fromClipData(
+                        appContext, systemPrimaryClip, cloneUri = !incomingSensitive,
+                    )
+                    val applied = clipboardEventGeneration.applyIfCurrent(callbackGeneration, mediaSource) {
                         primaryClip = item
                         insertOrMoveBeginning(item)
                     }
@@ -251,6 +278,8 @@ class ClipboardManager(
                             item.close(appContext)
                         }
                     }
+                } else {
+                    clipboardEventGeneration.applyIfCurrent(callbackGeneration) { /* accepted current clip */ }
                 }
             }
         }
