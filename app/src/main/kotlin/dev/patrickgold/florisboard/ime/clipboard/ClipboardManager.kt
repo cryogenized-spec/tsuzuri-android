@@ -39,6 +39,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.florisboard.lib.android.AndroidClipboardManager
 import org.florisboard.lib.android.AndroidClipboardManager_OnPrimaryClipChangedListener
 import org.florisboard.lib.android.clearPrimaryClipAnyApi
@@ -94,6 +96,7 @@ class ClipboardManager(
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val cleanUpJob: Job
     private var clipHistoryDb: ClipboardHistoryDatabase? = null
+    private val historyMutationMutex = Mutex()
     private val clipHistoryDao: ClipboardHistoryDao? get() = clipHistoryDb?.clipboardItemDao()
 
     val historyFlow: StateFlow<ClipboardHistory>
@@ -334,7 +337,20 @@ class ClipboardManager(
             if (nToRemove > 0) {
                 val itemsToRemove = nonPinnedItems.asReversed().filterIndexed { n, _ -> n < nToRemove }
                 ioScope.launch {
-                    clipHistoryDao?.delete(itemsToRemove)
+                    historyMutationMutex.withLock {
+                        val db = historyDatabase()
+                        val dao = db.clipboardItemDao()
+                        // Use the current database, not a stale UI history snapshot:
+                        // an item may have been pinned while this job was queued.
+                        val currentUnpinned = dao.getAll()
+                            .filterNot { it.isPinned }
+                            .sortedByDescending { it.creationTimestampMs }
+                        val expired = currentUnpinned.drop(prefs.clipboard.historySizeLimit.get())
+                        if (expired.isNotEmpty()) {
+                            db.runInTransaction { dao.delete(expired) }
+                            expired.forEach { it.close(appContext) }
+                        }
+                    }
                 }
             }
         }
@@ -350,9 +366,20 @@ class ClipboardManager(
             )
         }
         if (itemsToRemove.isEmpty()) return false
-        val dao = clipHistoryDao ?: return false
-        dao.delete(itemsToRemove)
-        return true
+        return historyMutationMutex.withLock {
+            val db = historyDatabase()
+            val dao = db.clipboardItemDao()
+            val now = System.currentTimeMillis()
+            // Re-evaluate expiry after acquiring the write mutex. Do not
+            // destroy items pinned or updated after the original plan.
+            val eligible = dao.getAll().filter { item ->
+                ClipboardCleanupScheduler.isExpired(item.toCleanupItem(), plan.policy, now)
+            }
+            if (eligible.isEmpty()) return@withLock false
+            db.runInTransaction { dao.delete(eligible) }
+            eligible.forEach { it.close(appContext) }
+            true
+        }
     }
 
     private fun ClipboardItem.toCleanupItem() = ClipboardCleanupItem(
@@ -363,25 +390,39 @@ class ClipboardManager(
 
     private fun moveToTheBeginning(oldItem: ClipboardItem, newItem: ClipboardItem) {
         ioScope.launch {
-            clipHistoryDao?.delete(oldItem.id)
-            clipHistoryDao?.insert(newItem)
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                db.runInTransaction {
+                    db.clipboardItemDao().delete(oldItem.id)
+                    db.clipboardItemDao().insert(newItem)
+                }
+            }
         }
     }
 
     fun insertClip(item: ClipboardItem) {
         if (!ClipboardRetentionPolicy.shouldPersist(item.isSensitive)) return
         ioScope.launch {
-            val id = clipHistoryDao?.insert(item)
-            item.id = id ?: 0
+            historyMutationMutex.withLock {
+                val id = historyDatabase().clipboardItemDao().insert(item)
+                item.id = id
+            }
         }
     }
 
     fun clearExactHistory(items: List<ClipboardItem>) {
         ioScope.launch {
-            for (item in items) {
-                item.close(appContext)
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                val ids = items.map { it.id }.toSet()
+                val removed = db.runInTransaction<List<ClipboardItem>> {
+                    val dao = db.clipboardItemDao()
+                    val existing = dao.getAll().filter { it.id in ids }
+                    if (existing.isNotEmpty()) dao.delete(existing)
+                    existing
+                }
+                removed.forEach { it.close(appContext) }
             }
-            clipHistoryDao?.delete(items)
         }
     }
 
@@ -390,11 +431,16 @@ class ClipboardManager(
      */
     fun clearHistory() {
         ioScope.launch {
-            // The DAO only deletes unpinned entries; media cleanup must match.
-            for (item in currentHistory.all.filterNot { it.isPinned }) {
-                item.close(appContext)
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                val removed = db.runInTransaction<List<ClipboardItem>> {
+                    val dao = db.clipboardItemDao()
+                    val old = dao.getAll().filterNot { it.isPinned }
+                    dao.deleteAllUnpinned()
+                    old
+                }
+                removed.forEach { it.close(appContext) }
             }
-            clipHistoryDao?.deleteAllUnpinned()
         }
     }
 
@@ -402,12 +448,7 @@ class ClipboardManager(
      * Clears the full clipboard history
      */
     fun clearFullHistory() {
-        ioScope.launch {
-            for (item in currentHistory.all) {
-                item.close(appContext)
-            }
-            clipHistoryDao?.deleteAll()
-        }
+        ioScope.launch { clearFullHistoryForRestore() }
     }
 
 
@@ -422,13 +463,16 @@ class ClipboardManager(
      */
     suspend fun restoreHistoryForRestore(items: List<ClipboardItem>) {
         withContext(Dispatchers.IO) {
-            historyDatabase().runInTransaction {
-                val dao = checkNotNull(clipHistoryDao)
-                val existing = dao.getAll().map { it.copy(id = 0) }.toMutableSet()
-                for (item in items) {
-                    if (!ClipboardRetentionPolicy.shouldPersist(item.isSensitive)) continue
-                    val candidate = item.copy(id = 0)
-                    if (existing.add(candidate)) dao.insert(candidate)
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                db.runInTransaction {
+                    val dao = db.clipboardItemDao()
+                    val existing = dao.getAll().map { it.copy(id = 0) }.toMutableSet()
+                    for (item in items) {
+                        if (!ClipboardRetentionPolicy.shouldPersist(item.isSensitive)) continue
+                        val candidate = item.copy(id = 0)
+                        if (existing.add(candidate)) dao.insert(candidate)
+                    }
                 }
             }
         }
@@ -440,52 +484,56 @@ class ClipboardManager(
      */
     suspend fun clearFullHistoryForRestore() {
         withContext(Dispatchers.IO) {
-            val oldItems = historyDatabase().runInTransaction<List<ClipboardItem>> {
-                val dao = checkNotNull(clipHistoryDao)
-                val old = dao.getAll()
-                dao.deleteAll()
-                old
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                val oldItems = db.runInTransaction<List<ClipboardItem>> {
+                    val dao = db.clipboardItemDao()
+                    val old = dao.getAll()
+                    dao.deleteAll()
+                    old
+                }
+                oldItems.forEach { it.close(appContext) }
             }
-            oldItems.forEach { it.close(appContext) }
         }
     }
 
     fun restoreHistory(items: List<ClipboardItem>) {
-        ioScope.launch {
-            val currentHistory = currentHistory.all
-            for (item in items) {
-                if (!currentHistory.map { it.copy(id = 0) }.contains(item.copy(id = 0))) {
-                    insertClip(item.copy(id = 0))
-                }
-            }
-        }
+        ioScope.launch { restoreHistoryForRestore(items) }
     }
 
     fun deleteClip(item: ClipboardItem, onlyIfUnpinned: Boolean) {
         ioScope.launch {
-            if (onlyIfUnpinned) {
-                clipHistoryDao?.deleteIfUnpinned(item.id)
-            } else {
-                clipHistoryDao?.delete(item.id)
-            }
-            tryOrNull {
-                val uri = item.uri
-                if (uri?.authority == ClipboardMediaProvider.AUTHORITY) {
-                    appContext.contentResolver.delete(uri, null, null)
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                val deleted = db.runInTransaction<ClipboardItem?> {
+                    val dao = db.clipboardItemDao()
+                    val existing = dao.getAll().firstOrNull { it.id == item.id }
+                    if (existing == null || (onlyIfUnpinned && existing.isPinned)) {
+                        null
+                    } else {
+                        dao.delete(existing.id)
+                        existing
+                    }
                 }
+                // Only delete media if a database row was actually removed.
+                deleted?.close(appContext)
             }
         }
     }
 
     fun pinClip(item: ClipboardItem) {
         ioScope.launch {
-            clipHistoryDao?.update(item.copy(isPinned = true))
+            historyMutationMutex.withLock {
+                historyDatabase().clipboardItemDao().update(item.copy(isPinned = true))
+            }
         }
     }
 
     fun unpinClip(item: ClipboardItem) {
         ioScope.launch {
-            clipHistoryDao?.update(item.copy(isPinned = false))
+            historyMutationMutex.withLock {
+                historyDatabase().clipboardItemDao().update(item.copy(isPinned = false))
+            }
         }
     }
 
