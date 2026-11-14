@@ -158,14 +158,16 @@ class ClipboardManager(
         }
     }
 
+    private fun historyDatabase(): ClipboardHistoryDatabase = synchronized(this) {
+        clipHistoryDb ?: ClipboardHistoryDatabase.new(appContext).also { clipHistoryDb = it }
+    }
+
     fun initializeForContext(context: Context) {
         ioScope.launch {
-            if (clipHistoryDb == null) {
-                clipHistoryDb = ClipboardHistoryDatabase.new(context.applicationContext)
-                withContext(Dispatchers.Main) {
-                    clipHistoryDao?.getAllAsFlow()?.collect { items ->
-                        updateHistory(items)
-                    }
+            val database = historyDatabase()
+            withContext(Dispatchers.Main) {
+                database.clipboardItemDao().getAllAsFlow().collect { items ->
+                    updateHistory(items)
                 }
             }
         }
@@ -414,6 +416,40 @@ class ClipboardManager(
      *
      * @param items the [ClipboardItem] list with the new items
      */
+    /**
+     * Restore uses awaiting, transaction-backed writes. The UI must never
+     * report success before its history rows have actually been committed.
+     */
+    suspend fun restoreHistoryForRestore(items: List<ClipboardItem>) {
+        withContext(Dispatchers.IO) {
+            historyDatabase().runInTransaction {
+                val dao = checkNotNull(clipHistoryDao)
+                val existing = dao.getAll().map { it.copy(id = 0) }.toMutableSet()
+                for (item in items) {
+                    if (!ClipboardRetentionPolicy.shouldPersist(item.isSensitive)) continue
+                    val candidate = item.copy(id = 0)
+                    if (existing.add(candidate)) dao.insert(candidate)
+                }
+            }
+        }
+    }
+
+    /**
+     * Clear all history before restoring an archive. Unlike clearFullHistory(),
+     * this function waits for the database transaction and file cleanup.
+     */
+    suspend fun clearFullHistoryForRestore() {
+        withContext(Dispatchers.IO) {
+            val oldItems = historyDatabase().runInTransaction<List<ClipboardItem>> {
+                val dao = checkNotNull(clipHistoryDao)
+                val old = dao.getAll()
+                dao.deleteAll()
+                old
+            }
+            oldItems.forEach { it.close(appContext) }
+        }
+    }
+
     fun restoreHistory(items: List<ClipboardItem>) {
         ioScope.launch {
             val currentHistory = currentHistory.all
