@@ -92,6 +92,15 @@ configure<ApplicationExtension> {
         }
     }
 
+    lint {
+        // Android Lint/K2 analyzer crashes in inherited Flog.kt:
+        // UElementAsPsiDetector -> KaFirExpressionTypeProvider.
+        // Keep all other Android lint issues enabled and fail on real findings.
+        // TODO: remove once AGP/Lint fixes the upstream analyzer crash.
+        disable += "UElementAsPsi"
+        abortOnError = true
+    }
+
     // Every standalone APK contains one ABI. Play derives device splits from the AAB.
     splits.abi {
         isEnable = providers.gradleProperty("ownkey.apkSplits").orNull != "false"
