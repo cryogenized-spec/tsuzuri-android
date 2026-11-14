@@ -501,8 +501,8 @@ class ClipboardManager(
         ioScope.launch { restoreHistoryForRestore(items) }
     }
 
-    fun deleteClip(item: ClipboardItem, onlyIfUnpinned: Boolean) {
-        ioScope.launch {
+    suspend fun deleteClipAwait(item: ClipboardItem, onlyIfUnpinned: Boolean): Boolean {
+        return withContext(Dispatchers.IO) {
             historyMutationMutex.withLock {
                 val db = historyDatabase()
                 val deleted = db.runInTransaction<ClipboardItem?> {
@@ -517,8 +517,13 @@ class ClipboardManager(
                 }
                 // Only delete media if a database row was actually removed.
                 deleted?.close(appContext)
+                deleted != null
             }
         }
+    }
+
+    fun deleteClip(item: ClipboardItem, onlyIfUnpinned: Boolean) {
+        ioScope.launch { deleteClipAwait(item, onlyIfUnpinned) }
     }
 
     fun pinClip(item: ClipboardItem) {
