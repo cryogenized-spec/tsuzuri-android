@@ -30,3 +30,12 @@ internal object ClipboardRetentionPolicy {
 
     fun shouldPersist(isSensitive: Boolean): Boolean = !isSensitive
 }
+
+/**
+ * Only URI media newly cloned from an external content provider may be
+ * discarded after the capture callback is superseded.
+ */
+internal object ClipboardCapturePolicy {
+    fun ownsNewClone(isMedia: Boolean, originalAuthority: String?, ownProviderAuthority: String): Boolean =
+        isMedia && originalAuthority != null && originalAuthority != ownProviderAuthority
+}

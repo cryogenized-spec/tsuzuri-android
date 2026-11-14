@@ -46,6 +46,33 @@ class ClipboardEventGenerationTest : FunSpec({
         }
     }
 
+    test("duplicate callback after a superseded capture remains eligible to apply") {
+        val gate = ClipboardEventGeneration()
+        val first = gate.next() // capture starts, observed value == "same"
+        val second = gate.next() // a second callback also observes "same"
+        gate.isCurrent(first) shouldBe false
+        gate.isCurrent(second) shouldBe true // no early same-value deduplication
+    }
+
+    test("discarded media never deletes a borrowed Tsuzuri provider URI") {
+        val ownAuthority = "io.github.cryogenizedspec.tsuzuri.provider.clipboard"
+        ClipboardCapturePolicy.ownsNewClone(
+            isMedia = true,
+            originalAuthority = ownAuthority,
+            ownProviderAuthority = ownAuthority,
+        ) shouldBe false
+        ClipboardCapturePolicy.ownsNewClone(
+            isMedia = true,
+            originalAuthority = "com.example.gallery",
+            ownProviderAuthority = ownAuthority,
+        ) shouldBe true
+        ClipboardCapturePolicy.ownsNewClone(
+            isMedia = false,
+            originalAuthority = "com.example.gallery",
+            ownProviderAuthority = ownAuthority,
+        ) shouldBe false
+    }
+
     test("sensitive flag key applies across Android API versions") {
         ClipboardRetentionPolicy.SENSITIVE_EXTRA shouldBe "android.content.extra.IS_SENSITIVE"
     }

@@ -24,6 +24,7 @@ import dev.patrickgold.florisboard.editorInstance
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardHistoryDao
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardHistoryDatabase
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardItem
+import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardMediaProvider
 import dev.patrickgold.florisboard.ime.clipboard.provider.ItemType
 import java.io.Closeable
 import kotlinx.coroutines.CoroutineScope
@@ -37,8 +38,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.florisboard.lib.android.AndroidClipboardManager
 import org.florisboard.lib.android.AndroidClipboardManager_OnPrimaryClipChangedListener
@@ -103,8 +102,6 @@ class ClipboardManager(
         get() = historyFlow.value
 
     private val clipboardEventGeneration = ClipboardEventGeneration()
-    private val primaryClipLastFromCallbackGuard = Mutex(locked = false)
-    private var primaryClipLastFromCallback: ClipData? = null
     val primaryClipFlow: StateFlow<ClipboardItem?>
         field = MutableStateFlow(null)
     inline var primaryClip
@@ -209,19 +206,9 @@ class ClipboardManager(
             val systemPrimaryClip = systemClipboardManager.primaryClip
             ioScope.launch {
                 if (!clipboardEventGeneration.isCurrent(callbackGeneration)) return@launch
-                val isDuplicate: Boolean
-                primaryClipLastFromCallbackGuard.withLock {
-                    val a = primaryClipLastFromCallback?.getItemAt(0)
-                    val b = systemPrimaryClip?.getItemAt(0)
-                    isDuplicate = when {
-                        a === b -> true
-                        a == null || b == null -> false
-                        else -> a.text == b.text && a.uri == b.uri
-                    }
-                    primaryClipLastFromCallback = systemPrimaryClip
-                }
-                if (isDuplicate || !clipboardEventGeneration.isCurrent(callbackGeneration)) return@launch
-
+                // Do not deduplicate until an event is actually applied. Otherwise
+                // an identical later callback can invalidate unfinished work and be
+                // mistaken for a duplicate, losing the clipboard update.
                 val internalPrimaryClip = primaryClip
 
                 if (systemPrimaryClip == null) {
@@ -242,11 +229,23 @@ class ClipboardManager(
                     return@launch
                 }
 
-                val isEqual = internalPrimaryClip?.isEqualTo(systemPrimaryClip) == true
+                val incomingSensitive = systemPrimaryClip.description.extras
+                    ?.getBoolean(ClipboardRetentionPolicy.SENSITIVE_EXTRA) ?: false
+                val isEqual = internalPrimaryClip?.isEqualTo(systemPrimaryClip) == true &&
+                    internalPrimaryClip.isSensitive == incomingSensitive
                 if (!isEqual) {
                     val item = ClipboardItem.fromClipData(appContext, systemPrimaryClip, cloneUri = true)
                     if (!clipboardEventGeneration.isCurrent(callbackGeneration)) {
-                        item.close(appContext)
+                        // Borrowed Tsuzuri provider URIs may belong to pinned/history clips.
+                        // Only close media newly copied from a different authority.
+                        if (ClipboardCapturePolicy.ownsNewClone(
+                                isMedia = item.type == ItemType.IMAGE || item.type == ItemType.VIDEO,
+                                originalAuthority = systemPrimaryClip.getItemAt(0).uri?.authority,
+                                ownProviderAuthority = ClipboardMediaProvider.AUTHORITY,
+                            )
+                        ) {
+                            item.close(appContext)
+                        }
                         return@launch
                     }
                     primaryClip = item
@@ -359,7 +358,8 @@ class ClipboardManager(
      */
     fun clearHistory() {
         ioScope.launch {
-            for (item in currentHistory.all) {
+            // The DAO only deletes unpinned entries; media cleanup must match.
+            for (item in currentHistory.all.filterNot { it.isPinned }) {
                 item.close(appContext)
             }
             clipHistoryDao?.deleteAllUnpinned()
