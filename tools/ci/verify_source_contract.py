@@ -43,6 +43,23 @@ require("SecureEndpointPolicy.isAllowed(endpointUrl)" in provider, "TLS gate for
 require("https" in source("app/src/main/kotlin/dev/patrickgold/florisboard/ime/text/network/SecureEndpointPolicy.kt"), "secure provider policy")
 require((ROOT / "app/src/test/kotlin/dev/patrickgold/florisboard/ime/clipboard/ClipboardEventGenerationTest.kt").exists(), "clipboard concurrency regression test")
 require((ROOT / "app/src/test/kotlin/dev/patrickgold/florisboard/ime/text/network/SecureEndpointPolicyTest.kt").exists(), "HTTPS regression test")
+# Lock down archive media restore and real-device privacy tests, not just strings
+restore = source("app/src/main/kotlin/dev/patrickgold/florisboard/app/settings/advanced/RestoreScreen.kt")
+restore_policy = source("app/src/main/kotlin/dev/patrickgold/florisboard/app/settings/advanced/RestoreCompatibilityPolicy.kt")
+restore_importer = source("app/src/main/kotlin/dev/patrickgold/florisboard/app/settings/advanced/ClipboardBackupMediaImporter.kt")
+storage = source("app/src/main/kotlin/dev/patrickgold/florisboard/ime/clipboard/provider/ClipboardFileStorage.kt")
+require("normalizeMediaReference" in restore_policy and "rawAuthority" in restore_policy, "archive media URI identity must be validated")
+require('".beta"' in restore_policy, "Ownkey and Tsuzuri beta archives remain supported")
+require("ClipboardBackupMediaImporter.validate(" in restore, "restore preflight before modifying data")
+require("ClipboardBackupMediaImporter.prepare(" in restore, "restore via dedicated media importer")
+require("restoreHistoryForRestore(" in restore and "clearFullHistoryForRestore()" in restore, "awaitable transactional history restore")
+require("importMediaFromBackup" in storage and "destination.exists()" in storage, "restore media must never overwrite a colliding file ID")
+require("ClipboardMediaProvider.registerRestored" in restore_importer, "restored content needs usable MIME metadata")
+require("ClipboardRetentionPolicy.shouldPersist(item.isSensitive)" in restore_importer, "never import sensitive legacy media")
+require((ROOT / "app/src/androidTest/kotlin/dev/patrickgold/florisboard/TsuzuriClipboardSecurityTest.kt").exists(), "Android clipboard privacy instrumentation")
+require(":app:assembleDebugAndroidTest" in workflow, "compile Android instrumentation")
+require("android-instrumentation:" in workflow and "reactivecircus/android-emulator-runner" in workflow, "execute Android emulator privacy tests")
+require('test "$INSTRUMENTATION" = \'success\'' in workflow, "mandatory instrumentation status check")
 for path in (".github/workflows/crowdin-upload.yml", ".github/workflows/validate-strings-no-translations.yml"):
     require(not (ROOT / path).exists(), f"remove inherited privileged workflow {path}")
 if errors:
