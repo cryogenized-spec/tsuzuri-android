@@ -213,14 +213,14 @@ class ClipboardManager(
 
                 if (systemPrimaryClip == null) {
                     if (syncBehavior.shouldSyncClear) {
-                        primaryClip = null
+                        clipboardEventGeneration.applyIfCurrent(callbackGeneration) { primaryClip = null }
                     }
                     return@launch
                 }
 
                 if (systemPrimaryClip.getItemAt(0).let { it.text == null && it.uri == null }) {
                     if (syncBehavior.shouldSyncClear) {
-                        primaryClip = null
+                        clipboardEventGeneration.applyIfCurrent(callbackGeneration) { primaryClip = null }
                     }
                     return@launch
                 }
@@ -235,7 +235,11 @@ class ClipboardManager(
                     internalPrimaryClip.isSensitive == incomingSensitive
                 if (!isEqual) {
                     val item = ClipboardItem.fromClipData(appContext, systemPrimaryClip, cloneUri = true)
-                    if (!clipboardEventGeneration.isCurrent(callbackGeneration)) {
+                    val applied = clipboardEventGeneration.applyIfCurrent(callbackGeneration) {
+                        primaryClip = item
+                        insertOrMoveBeginning(item)
+                    }
+                    if (!applied) {
                         // Borrowed Tsuzuri provider URIs may belong to pinned/history clips.
                         // Only close media newly copied from a different authority.
                         if (ClipboardCapturePolicy.ownsNewClone(
@@ -246,10 +250,7 @@ class ClipboardManager(
                         ) {
                             item.close(appContext)
                         }
-                        return@launch
                     }
-                    primaryClip = item
-                    insertOrMoveBeginning(item)
                 }
             }
         }

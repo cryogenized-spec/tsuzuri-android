@@ -16,8 +16,18 @@ import java.util.concurrent.atomic.AtomicLong
 internal class ClipboardEventGeneration {
     private val latest = AtomicLong(0L)
 
-    fun next(): Long = latest.incrementAndGet()
+    fun next(): Long = synchronized(this) { latest.incrementAndGet() }
     fun isCurrent(epoch: Long): Boolean = latest.get() == epoch
+
+    /** Atomically compare the generation and apply a short local state update. */
+    fun applyIfCurrent(epoch: Long, update: () -> Unit): Boolean = synchronized(this) {
+        if (latest.get() != epoch) {
+            false
+        } else {
+            update()
+            true
+        }
+    }
 }
 
 /**

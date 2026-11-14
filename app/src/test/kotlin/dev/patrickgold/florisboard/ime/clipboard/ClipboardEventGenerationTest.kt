@@ -21,6 +21,43 @@ class ClipboardEventGenerationTest : FunSpec({
         generations.isCurrent(newest) shouldBe true
     }
 
+    test("only the newest callback can commit state after a generation transition") {
+        val gate = ClipboardEventGeneration()
+        val old = gate.next()
+        val fresh = gate.next()
+        var applied = "unchanged"
+        gate.applyIfCurrent(old) { applied = "stale" } shouldBe false
+        gate.applyIfCurrent(fresh) { applied = "new" } shouldBe true
+        applied shouldBe "new"
+    }
+
+    test("concurrent callbacks never commit an older generation after a newer one") {
+        val gate = ClipboardEventGeneration()
+        val workers = 8
+        val eventsPerWorker = 700
+        val applied = java.util.concurrent.atomic.AtomicLong(-1L)
+        val executor = Executors.newFixedThreadPool(workers)
+        val done = CountDownLatch(workers)
+        try {
+            repeat(workers) {
+                executor.execute {
+                    try {
+                        repeat(eventsPerWorker) {
+                            val event = gate.next()
+                            gate.applyIfCurrent(event) { applied.set(event) }
+                        }
+                    } finally {
+                        done.countDown()
+                    }
+                }
+            }
+            done.await(30, TimeUnit.SECONDS) shouldBe true
+            applied.get() shouldBe (workers * eventsPerWorker).toLong()
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
     test("concurrent rapid clipboard callbacks issue unique generations") {
         val generations = ClipboardEventGeneration()
         val workers = 8
