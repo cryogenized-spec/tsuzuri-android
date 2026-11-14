@@ -34,6 +34,7 @@ import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.app.LocalNavController
 import dev.patrickgold.florisboard.cacheManager
 import dev.patrickgold.florisboard.clipboardManager
+import dev.patrickgold.florisboard.ime.clipboard.ClipboardRetentionPolicy
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardFileStorage
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardItem
 import dev.patrickgold.florisboard.ime.clipboard.provider.ItemType
@@ -206,14 +207,14 @@ fun RestoreScreen() = FlorisScreen {
                 val clipboardItems = clipboardFilesDir.subFile(Backup.CLIPBOARD_TEXT_ITEMS_JSON_NAME)
                 if (clipboardItems.exists()) {
                     val clipboardItemsList = clipboardItems.readJson<List<ClipboardItem>>()
-                    clipboardManager.restoreHistory(items = clipboardItemsList.filter { it.type == ItemType.TEXT })
+                    clipboardManager.restoreHistory(items = clipboardItemsList.filter { it.type == ItemType.TEXT && ClipboardRetentionPolicy.shouldPersist(it.isSensitive) })
                 }
             }
             if (restoreFilesSelector.clipboardImageItems) {
                 val clipboardItems = clipboardFilesDir.subFile(Backup.CLIPBOARD_IMAGES_JSON_NAME)
                 if (clipboardItems.exists()) {
                     val clipboardItemsList = clipboardItems.readJson<List<ClipboardItem>>()
-                    for (item in clipboardItemsList.filter { it.type == ItemType.IMAGE }) {
+                    for (item in clipboardItemsList.filter { it.type == ItemType.IMAGE && ClipboardRetentionPolicy.shouldPersist(it.isSensitive) }) {
                         ClipboardFileStorage.insertFileFromBackupIfNotExisting(
                             context,
                             clipboardFilesDir.subFile(
@@ -225,14 +226,14 @@ fun RestoreScreen() = FlorisScreen {
                             )
                         )
                     }
-                    clipboardManager.restoreHistory(items = clipboardItemsList.filter { it.type == ItemType.IMAGE })
+                    clipboardManager.restoreHistory(items = clipboardItemsList.filter { it.type == ItemType.IMAGE && ClipboardRetentionPolicy.shouldPersist(it.isSensitive) })
                 }
             }
             if (restoreFilesSelector.clipboardVideoItems) {
                 val clipboardItems = clipboardFilesDir.subFile(Backup.CLIPBOARD_VIDEO_JSON_NAME)
                 if (clipboardItems.exists()) {
                     val clipboardItemsList = clipboardItems.readJson<List<ClipboardItem>>()
-                    for (item in clipboardItemsList.filter { it.type == ItemType.VIDEO }) {
+                    for (item in clipboardItemsList.filter { it.type == ItemType.VIDEO && ClipboardRetentionPolicy.shouldPersist(it.isSensitive) }) {
                         ClipboardFileStorage.insertFileFromBackupIfNotExisting(
                             context,
                             clipboardFilesDir.subFile(
@@ -244,7 +245,7 @@ fun RestoreScreen() = FlorisScreen {
                             )
                         )
                     }
-                    clipboardManager.restoreHistory(items = clipboardItemsList.filter { it.type == ItemType.VIDEO })
+                    clipboardManager.restoreHistory(items = clipboardItemsList.filter { it.type == ItemType.VIDEO && ClipboardRetentionPolicy.shouldPersist(it.isSensitive) })
                 }
             }
         }

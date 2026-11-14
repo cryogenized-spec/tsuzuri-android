@@ -40,6 +40,7 @@ import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.app.LocalNavController
 import dev.patrickgold.florisboard.cacheManager
 import dev.patrickgold.florisboard.clipboardManager
+import dev.patrickgold.florisboard.ime.clipboard.ClipboardRetentionPolicy
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardFileStorage
 import dev.patrickgold.florisboard.ime.clipboard.provider.ItemType
 import dev.patrickgold.florisboard.lib.cache.CacheManager
@@ -223,7 +224,10 @@ fun BackupScreen() = FlorisScreen {
 
         if (backupFilesSelector.provideClipboardItems()) {
             val clipboardManager by context.clipboardManager()
+            // Legacy installs may contain sensitive rows from an older clipboard database.
+            // Exclude those rows and their image/video files from all backup archives.
             val clipboardHistory = clipboardManager.currentHistory.all
+                .filter { ClipboardRetentionPolicy.shouldPersist(it.isSensitive) }
             val clipboardFilesDir = workspace.inputDir.subDir("clipboard")
             clipboardFilesDir.mkdir()
             if (backupFilesSelector.clipboardTextItems) {
