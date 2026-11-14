@@ -269,7 +269,7 @@ class ClipboardManager(
                     if (!applied) {
                         // Borrowed Tsuzuri provider URIs may belong to pinned/history clips.
                         // Only close media newly copied from a different authority.
-                        if (ClipboardCapturePolicy.ownsNewClone(
+                        if (!incomingSensitive && ClipboardCapturePolicy.ownsNewClone(
                                 isMedia = item.type == ItemType.IMAGE || item.type == ItemType.VIDEO,
                                 originalAuthority = systemPrimaryClip.getItemAt(0).uri?.authority,
                                 ownProviderAuthority = ClipboardMediaProvider.AUTHORITY,
@@ -434,7 +434,7 @@ class ClipboardManager(
             }
             tryOrNull {
                 val uri = item.uri
-                if (uri != null) {
+                if (uri?.authority == ClipboardMediaProvider.AUTHORITY) {
                     appContext.contentResolver.delete(uri, null, null)
                 }
             }
