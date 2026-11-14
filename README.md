@@ -1,145 +1,42 @@
-<p align="center">
-  <a href="https://ownkey.bvdm.ai">
-    <img src="assets/branding/readme/ownkey-android-intro.png" alt="Ownkey Keyboard, a full Android keyboard with dictation and AI rewrite built in" width="781">
-  </a>
-</p>
+# Tsuzuri — Interface for Android
 
-<table>
-  <tr>
-    <td width="52%">
-      <img src="assets/branding/readme/ownkey-android-features.png" alt="Ownkey features: voice typing, AI rewrite, provider choice, and no added keyboard-content monitoring">
-    </td>
-    <td width="48%">
-      <img src="assets/branding/readme/ownkey-android-keyboard.png" alt="Ownkey Android keyboard with active voice dictation">
-    </td>
-  </tr>
-</table>
+**Status: early development fork. Not yet a tested Tsuzuri release.**
 
-<p align="center">
-  <a href="https://ownkey.bvdm.ai"><strong>Website</strong></a>
-  ·
-  <a href="https://github.com/MajesteitBart/ownkey-keyboard/releases/latest"><strong>Download</strong></a>
-  ·
-  <a href="CONTRIBUTING.md"><strong>Contributing</strong></a>
-</p>
+Tsuzuri (綴り) is an open-source Android input interface focused on fast everyday typing, advanced editing, flexible layouts, and optional AI-powered voice transcription and rewriting. The first priority is a responsive, dependable keyboard; network-backed features must never block normal input.
 
-# Ownkey Keyboard
+## Foundation and provenance
 
-Ownkey is an open-source Android keyboard with voice dictation and AI rewrite built in. You bring your own API key, or you dictate on the phone itself with Orukeet, a speech model you download once. Cloud dictation audio and rewrite requests go straight from your phone to the provider you configure. There is no Ownkey account and no Ownkey server in between.
+Tsuzuri is derived from [Ownkey Keyboard](https://github.com/MajesteitBart/ownkey-keyboard), itself a fork of [FlorisBoard](https://github.com/florisboard/florisboard). The inherited source is provided under Apache License 2.0, subject to individual dependencies and asset licences. See [LICENSE](LICENSE) and [docs/UPSTREAM.md](docs/UPSTREAM.md).
 
-Ownkey is a fork of [FlorisBoard](https://github.com/florisboard/florisboard), so it keeps FlorisBoard's layouts, themes, clipboard and glide typing. On top of that it adds dictation, rewrite, a rebuilt English and Dutch autocorrect, a floating split keyboard for tablets and a voice-only mode.
+The fork was created from Ownkey commit `5fafed3602a9d250f9c97de50300e927147c92d6` (its 0.12.0 development baseline). Existing transcription, rewriting, predictive typing, clipboard, themes, and other capabilities remain **inherited implementations, not independently validated Tsuzuri features**.
 
-## Install
+## Development build
 
-Download the APK for your phone from the [latest release](https://github.com/MajesteitBart/ownkey-keyboard/releases/latest). Almost every current phone needs `arm64-v8a`. Older 32-bit phones need `armeabi-v7a`, and the `x86_64` and `x86` builds are for emulators. Each release lists the checksums in `SHA256SUMS`.
-
-Ownkey needs Android 8.0 (API 26) or newer. After installing, open Ownkey and follow the setup to enable it as your keyboard. Typing works right away. The app itself is in English. That doesn't change which languages you can type or dictate in. Rewrite uses a cloud provider and needs an API key. Dictation can use a cloud provider as well, or [Orukeet on the phone](#on-device-dictation) on 64-bit ARM phones. [Set up AI](#set-up-ai) walks through it.
-
-## What it does
-
-### Typing and autocorrect
-
-Autocorrect was rebuilt in 0.8.0 for English, Dutch and mixed Dutch and English typing. When you press space, it fixes typos based on which keys are next to each other, where your finger actually landed and the word before. It also predicts the next word, adds apostrophes (`dont` becomes "don't") and splits words that ran together.
-
-Choose Gentle, Normal or Strong under **Autocorrect strength** in the typing settings. After a correction, the word you typed is the first suggestion, and backspace brings it back too. Words you keep typing stop getting corrected. With "Block possibly offensive words" on, which is the default, words on Ownkey's reviewed block lists stay out of suggestions, predictions and autocorrect.
-
-Keyboards in other languages fall back to FlorisBoard's older English word list. They get the new scoring, but not the new dictionaries, word-pair data or apostrophe rules.
-
-Ownkey learns your own word sequences to improve predictions. That data stays on the phone, and learning is skipped in incognito mode and password fields.
-
-### Dictation
-
-Tap the microphone, speak and tap stop. Ownkey inserts the transcript at the cursor. Dictation uses Mistral Voxtral by default, and you can point it at another compatible transcription endpoint and model. On 64-bit ARM phones you can also download Orukeet and dictate without a connection. Words then appear while you talk. See [On-device dictation](#on-device-dictation).
-
-The personal dictionary under **Settings → AI** helps with names and jargon. With Mistral and OpenAI, saved words go along as recognition hints. Saved corrections are applied to every transcript, and filler words can be removed. When dictation mishears a word, "Fix a word" on the keyboard turns it into a saved correction.
-
-**More → Voice only** replaces the keyboard with a small bar that holds the microphone, a rewrite button and, with more than one keyboard language, a language button. You can drag it anywhere on screen. Password, incognito and number fields still get the full keyboard. See [docs/voice-only-keyboard.md](docs/voice-only-keyboard.md).
-
-### Rewrite
-
-Select text, or select nothing to rewrite the whole field, then open AI rewrite and pick a voice: Improve writing, Fix grammar, Make shorter, Rewrite in Dutch, Plainspoken or one you write yourself. You see the result first, and your text only changes when you tap Insert. To give the instruction by voice, hold the microphone key instead.
-
-Rewrite has presets for OpenAI (Responses and Chat Completions), Anthropic, Mistral and OpenRouter, and it accepts any OpenAI-compatible endpoint. OpenRouter is the default.
-
-### Tablets and foldables
-
-On a wide screen the keyboard can split in two, with a space bar on each half. **More → Floating** turns the halves into two panels you can drag and resize, with rewrite, clipboard and dictation above the keys. See [docs/floating-split-tablet.md](docs/floating-split-tablet.md).
-
-## Set up AI
-
-1. Create an API key with the provider you want. A ChatGPT or Claude app subscription doesn't include API access.
-2. Open **Settings → AI**. The top of the screen shows what dictation and rewrite use right now.
-3. Under **Dictation**, choose Orukeet on the phone, cloud dictation, or your phone's own voice typing. For cloud dictation, paste your key under **Cloud dictation** and keep the Mistral defaults or enter another endpoint and model.
-4. Under **Rewrite**, pick a provider, paste a key from that provider and check the model.
-
-| | Provider | Endpoint | Model |
-| --- | --- | --- | --- |
-| Dictation | Mistral | `https://api.mistral.ai/v1/audio/transcriptions` | `voxtral-mini-latest` |
-| Rewrite | OpenRouter | `https://openrouter.ai/api/v1/chat/completions` | `meta/muse-spark-1.1` |
-
-Ownkey stores API keys encrypted on the phone, using Android Keystore. [VOXTRAL_API_SETUP.md](VOXTRAL_API_SETUP.md) explains how to send dictation through your own relay instead of calling Mistral directly.
-
-<a name="privacy-model"></a>
-
-## Where your data goes
-
-The full privacy policy is in [PRIVACY.md](PRIVACY.md).
-
-| What you do | What leaves the phone |
-| --- | --- |
-| Type | No AI requests. Suggestions, autocorrect and learning run on the phone. |
-| Dictate with a cloud provider | The recording goes to your dictation endpoint. By default, Mistral and OpenAI endpoints also get your personal dictionary words as hints. The personal dictionary settings can turn this off or send hints to any endpoint. |
-| Dictate with Orukeet | Nothing. The recording is transcribed on the phone. |
-| Download Orukeet | The model files come from this repository's GitHub releases, so GitHub sees the download. |
-| Rewrite | The selected text and the instruction go to your rewrite endpoint. |
-| Rewrite by voice | The spoken instruction goes to your dictation endpoint, or stays on the phone with Orukeet. The selected text and the recognized instruction then go to your rewrite endpoint. |
-
-Ownkey doesn't operate a relay of its own and doesn't add monitoring of what you type or say. Once a request reaches your provider, that provider's privacy policy, retention terms and billing apply.
-
-### On-device dictation
-
-Orukeet is a speech model that transcribes Dutch and English on the phone, without an API key or internet connection. The audio stays on the phone. Open **Settings → AI**, download the model on the **Orukeet model** card and tap **Use Orukeet for dictation**. The download is 672 MB, and the first installation needs about 940 MB of free storage. To switch back, pick another option under **Dictation**. You can delete the model from the Orukeet model card.
-
-Orukeet runs on 64-bit ARM phones, which means the `arm64-v8a` APK. The card doesn't appear on other devices. Testing on physical phones is still limited, so speed and memory use on older or low-memory phones are not measured yet.
-
-## Build from source
-
-You need JDK 17, [Rust](https://www.rust-lang.org/tools/install) through `rustup`, and the Android SDK for API 36. The build also uses the NDK and CMake versions listed in [`gradle/tools.versions.toml`](gradle/tools.versions.toml). [CONTRIBUTING.md](CONTRIBUTING.md) has the full list.
+Prerequisites: JDK 17, Android SDK API 36, the configured Android NDK/CMake, and Rust toolchain (see `gradle/tools.versions.toml` and upstream `CONTRIBUTING.md`).
 
 ```bash
-./gradlew :app:assembleDebug        # phone app
-./gradlew :app:testDebugUnitTest    # unit tests, including the autocorrect benchmark
+./gradlew :app:assembleDebug
+./gradlew :lib:prediction:test :app:testDebugUnitTest
 ```
 
-On Windows, use `.\gradlew.bat` instead of `./gradlew`.
+Debug variants use a distinct application ID: `io.github.cryogenizedspec.tsuzuri.debug`. The Kotlin namespace remains `dev.patrickgold.florisboard` during migration to avoid an unnecessary mass refactor.
 
-| Build type | Package | Notes |
-| --- | --- | --- |
-| `debug` | `nl.bartvandermeeren.ownkey.debug` | Installs next to the release app. Orukeet also runs on x86_64 emulators. |
-| `beta` | `nl.bartvandermeeren.ownkey.beta` | Minified and signed with the debug key. Shows Orukeet failure details. |
-| `release` | `nl.bartvandermeeren.ownkey` | Signed with the key in `keystore.properties` if present, otherwise with the debug key. |
+The CI workflow builds a debug APK and runs unit tests on every pull request. **An APK should be considered experimental until successfully installed and tested on a physical device.**
 
-APKs are split per processor type. Pass `-Pownkey.apkSplits=false` to build a single APK. The [Android CI workflow](.github/workflows/android.yml) builds the phone app for every pull request to `main`.
+## Direction
 
-## Repository map
+- **M0 — bootstrap:** independent app ID/name, safe CI, reproducible build, baseline keyboard typing tests
+- **M1 — everyday input:** audit prediction, corrections, clipboard, multilingual behavior, editor compatibility
+- **M2 — voice:** optional BYOK OpenAI transcription (`gpt-transcribe`) with cancel, preview, provider controls
+- **M3 — productivity:** programmable action bar, text buffer/full-screen editor, app profiles
+- **M4 — publish:** own icon/branding, accessibility, privacy/security, third-party notices, Play Store compliance, signed AAB
 
-| Path | Contents |
-| --- | --- |
-| [`app/`](app/) | The phone keyboard: typing, autocorrect, dictation, rewrite and settings |
-| [`lib/`](lib/) | Shared Android, Compose, Kotlin, native and theme libraries |
-| [`tools/`](tools/) | Dictionary build scripts, autocorrect test data and the Orukeet runtime |
-| [`docs/`](docs/) | Feature notes, screenshots and the brand book |
-| [`.project/`](.project/) | Specs, plans and decisions per feature, such as the [autocorrect rebuild](.project/projects/autocorrect-engine/spec.md) |
-| [`fastlane/metadata/android/`](fastlane/metadata/android/) | Google Play listing text and images |
+See [docs/ROADMAP-TSUZURI.md](docs/ROADMAP-TSUZURI.md).
 
-## Contributing
+## Privacy and development safety
 
-Issues and pull requests are welcome in this repository. [CONTRIBUTING.md](CONTRIBUTING.md) covers bug reports, translations, build requirements and what a pull request needs.
+Normal typing should stay local. Network operations require direct action from the user and clear disclosure; no hosted keys are embedded in the APK. This fork inherits Ownkey's local storage and network implementation, **which is undergoing independent review**. See the [development privacy notice](PRIVACY.md).
 
-Typing speed comes first. AI network work must never block normal typing, suggestions or opening the keyboard.
+## Upstream relationship
 
-## License and attribution
-
-Ownkey Keyboard is licensed under the [Apache License 2.0](LICENSE). It is derived from [FlorisBoard](https://github.com/florisboard/florisboard) by Patrick Goldinger and contributors.
-
-The English and Dutch dictionaries are built from FrequencyWords (CC BY-SA 4.0), SCOWL, the OpenTaal word list and Tatoeba sentences (CC BY 2.0 FR). See [the dictionary attribution](app/src/main/assets/ime/dict/latin/ATTRIBUTION.md) for versions and licenses.
+Ownkey and FlorisBoard remain credited as upstream authors. Tsuzuri is independent and is not their official application. Internal code identifiers, existing visual assets and some inherited documentation may still refer to those projects while the fork is being separated. Do not publish the current APK as a finished Tsuzuri product.

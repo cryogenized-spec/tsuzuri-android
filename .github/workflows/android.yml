@@ -1,176 +1,41 @@
-name: Ownkey Android CI
+name: Tsuzuri Android CI
 
 on:
-  push:
-    tags:
-      - "v*"
   pull_request:
-    branches: [ main ]
-  # Only merged code is built with the target event's write-capable token.
-  pull_request_target:
-    branches: [ main ]
-    types: [ closed ]
+    branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      build_type:
-        description: "APK build type"
-        required: false
-        default: "beta"
-        type: choice
-        options:
-          - debug
-          - beta
-          - release
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
-    if: github.event_name != 'pull_request_target' || github.event.pull_request.merged == true
+  build-and-test:
     runs-on: ubuntu-latest
-    concurrency:
-      group: android-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event_name == 'pull_request_target' && 'ci-debug' || github.ref }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          # Concurrency keeps only one pending run. Even an old rerun that takes that
-          # slot must build the current main tip rather than displacing a newer merge.
-          ref: ${{ github.event_name == 'pull_request_target' && 'refs/heads/main' || github.sha }}
           submodules: recursive
-          fetch-depth: 0
-
-      - name: Test rolling CI publication policy
-        run: bash .github/scripts/test-publish-ci-debug.sh
-
-      - name: Test phone ABI packaging
-        run: python3 .github/scripts/test-package-phone.py
-
-      - uses: gradle/actions/wrapper-validation@v4
-
-      - name: Set up JDK 17
+      - name: Verify Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+      - name: JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: 17
           distribution: temurin
+          java-version: '17'
           cache: gradle
-
-      - name: Set up CMake and Ninja
+      - name: CMake and Ninja
         uses: lukka/get-cmake@v4.0.2
-
-      - name: Resolve build tasks and version metadata
-        id: vars
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            BUILD_TYPE="${{ github.event.inputs.build_type }}"
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            BUILD_TYPE="release"
-          else
-            BUILD_TYPE="debug"
-          fi
-
-          BUILD_TYPE="${BUILD_TYPE,,}"
-          BUILD_TYPE_CAP="${BUILD_TYPE^}"
-          APP_APK_TASK=":app:assemble${BUILD_TYPE_CAP}"
-
-          if [[ "${BUILD_TYPE}" == "release" ]]; then
-            APP_BUNDLE_TASK=":app:bundleRelease"
-          else
-            APP_BUNDLE_TASK=""
-          fi
-
-          VERSION=$(grep '^projectVersionName=' gradle.properties | cut -d= -f2 | tr -d '\r')
-          COMMIT=$(git rev-parse HEAD)
-          SHORT_SHA="${COMMIT:0:7}"
-          echo "commit=${COMMIT}" >> "$GITHUB_OUTPUT"
-
-          echo "build_type=${BUILD_TYPE}" >> "$GITHUB_OUTPUT"
-          echo "app_apk_task=${APP_APK_TASK}" >> "$GITHUB_OUTPUT"
-          echo "app_bundle_task=${APP_BUNDLE_TASK}" >> "$GITHUB_OUTPUT"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-
-          echo "Selected app APK task: ${APP_APK_TASK}"
-          if [[ -n "${APP_BUNDLE_TASK}" ]]; then
-            echo "Selected app AAB task: ${APP_BUNDLE_TASK}"
-          fi
-          echo "Version: ${VERSION}"
-
-      - name: Build phone APK with Gradle
-        run: ./gradlew clean ${{ steps.vars.outputs.app_apk_task }} --stacktrace
-
-      - name: Run unit tests
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Run prediction and app unit tests
         run: ./gradlew :lib:prediction:test :app:testDebugUnitTest --stacktrace
-
-      - name: Build phone release AAB
-        if: ${{ steps.vars.outputs.app_bundle_task != '' }}
-        run: ./gradlew ${{ steps.vars.outputs.app_bundle_task }} -Pownkey.apkSplits=false --stacktrace
-
-      - name: Prepare versioned distributables
-        id: package
-        shell: bash
-        run: |
-          rm -rf dist
-          mkdir -p dist/phone
-
-          BUILD_TYPE="${{ steps.vars.outputs.build_type }}"
-          VERSION="${{ steps.vars.outputs.version }}"
-          SHORT_SHA="${{ steps.vars.outputs.short_sha }}"
-
-          python3 .github/scripts/package-phone.py --build-type "$BUILD_TYPE" --version "$VERSION" --sha "$SHORT_SHA" >> "$GITHUB_OUTPUT"
-
-          if [[ -n "${{ steps.vars.outputs.app_bundle_task }}" ]]; then
-            APP_AAB_SRC=$(ls app/build/outputs/bundle/release/*.aab | head -n1)
-            APP_AAB_NAME="ownkey-phone-release-v${VERSION}-${SHORT_SHA}.aab"
-            cp "$APP_AAB_SRC" "dist/phone/${APP_AAB_NAME}"
-            echo "app_aab=dist/phone/${APP_AAB_NAME}" >> "$GITHUB_OUTPUT"
-          fi
-
-          python3 - <<'PY'
-          import hashlib
-          from pathlib import Path
-          files = sorted(path for path in Path("dist").glob("*/*") if path.suffix in (".apk", ".aab"))
-          with Path("dist/SHA256SUMS").open("w") as output:
-              for path in files:
-                  with path.open("rb") as source:
-                      output.write(f"{hashlib.file_digest(source, 'sha256').hexdigest()}  {path.name}\n")
-          PY
-          echo "Prepared distributables:"
-          find dist -type f -maxdepth 3 | sort
-
-      - name: Upload phone APK artifact
+      - name: Upload debug APKs
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: ownkey-phone-${{ steps.vars.outputs.build_type }}-v${{ steps.vars.outputs.version }}
-          path: dist/phone/*.apk
+          name: tsuzuri-debug-apks
+          path: app/build/outputs/apk/debug/**/*.apk
           if-no-files-found: error
-
-      - name: Upload phone release AAB artifact
-        if: ${{ steps.vars.outputs.app_bundle_task != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ownkey-phone-release-aab-v${{ steps.vars.outputs.version }}
-          path: ${{ steps.package.outputs.app_aab }}
-          if-no-files-found: error
-
-      - name: Update rolling CI debug prerelease after a PR merge
-        if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD_COMMIT: ${{ steps.vars.outputs.commit }}
-          VERSION: ${{ steps.vars.outputs.version }}
-          PHONE_APK: ${{ steps.package.outputs.app_apk }}
-        run: bash .github/scripts/publish-ci-debug.sh
-
-      - name: Publish GitHub release assets (tag builds)
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/SHA256SUMS
-            dist/phone/*.apk
-            dist/phone/*.aab
-          generate_release_notes: true

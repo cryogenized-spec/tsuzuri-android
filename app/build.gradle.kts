@@ -71,7 +71,7 @@ configure<ApplicationExtension> {
     }
 
     defaultConfig {
-        applicationId = "nl.bartvandermeeren.ownkey"
+        applicationId = "io.github.cryogenizedspec.tsuzuri"
         minSdk = projectMinSdk.toInt()
         targetSdk = projectTargetSdk.toInt()
         versionCode = projectVersionCode.toInt()
