@@ -12,6 +12,8 @@ import android.net.Uri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.patrickgold.florisboard.app.settings.advanced.ClipboardBackupMediaImporter
+import dev.patrickgold.florisboard.clipboardManager
+import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardHistoryDatabase
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardFileStorage
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardItem
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardMediaProvider
@@ -99,6 +101,38 @@ class TsuzuriClipboardSecurityTest {
             val filesAfter = localDir.listFiles()?.map { it.name }?.toSet().orEmpty()
             assertEquals(filesBefore, filesAfter)
         } finally {
+            sourceDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun conditionalDeletionRetainsPinnedImageFileUntilExplicitlyDeleted() = runBlocking {
+        val sourceDir = FsFile(context.cacheDir, "tsuzuri-pinned-test-" + System.nanoTime())
+        val archiveFiles = sourceDir.subDir(ClipboardFileStorage.CLIPBOARD_FILES_PATH)
+        archiveFiles.mkdirs()
+        val archiveId = (System.nanoTime() and Long.MAX_VALUE).coerceAtLeast(1L)
+        archiveFiles.subFile(archiveId.toString()).writeText("pinned-image-fixture")
+        val db = ClipboardHistoryDatabase.new(context)
+        var item: ClipboardItem? = null
+        try {
+            item = ClipboardBackupMediaImporter.prepare(
+                context, sourceDir, oldPackage, 127, listOf(oldImage(archiveId)), ItemType.IMAGE,
+            ).single()
+            val media = requireNotNull(item)
+            val storedFile = ClipboardFileStorage.getFileForId(
+                context, ContentUris.parseId(requireNotNull(media.uri)),
+            )
+            val manager = context.clipboardManager().value
+            manager.restoreHistoryForRestore(listOf(media.copy(isPinned = true)))
+            val saved = db.clipboardItemDao().getAll().first { it.uri == media.uri }
+            assertTrue(saved.isPinned)
+            assertFalse(manager.deleteClipAwait(saved, onlyIfUnpinned = true))
+            assertTrue(storedFile.isFile)
+            assertTrue(manager.deleteClipAwait(saved, onlyIfUnpinned = false))
+            assertFalse(storedFile.exists())
+        } finally {
+            item?.close(context)
+            db.close()
             sourceDir.deleteRecursively()
         }
     }
