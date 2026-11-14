@@ -33,6 +33,7 @@ import dev.patrickgold.florisboard.clipboardManager
 import dev.patrickgold.florisboard.ime.ImeUiMode
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardFileStorage
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardItem
+import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardMediaProvider
 import dev.patrickgold.florisboard.ime.clipboard.provider.ItemType
 import dev.patrickgold.florisboard.ime.input.InputShiftState
 import dev.patrickgold.florisboard.ime.keyboard.IncognitoMode
@@ -450,19 +451,26 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
                 }
             }
             ItemType.IMAGE, ItemType.VIDEO -> {
-                item.uri ?: return false
-                val id = ContentUris.parseId(item.uri)
-                val file = ClipboardFileStorage.getFileForId(appContext, id)
-                if (!file.exists()) return false
+                val mediaUri = item.uri ?: return false
+                // Borrowed external URIs are not Tsuzuri clipboard files.
+                // They may have a non-numeric document ID and a short-lived grant.
+                if (mediaUri.authority == ClipboardMediaProvider.AUTHORITY) {
+                    val id = runCatching { ContentUris.parseId(mediaUri) }.getOrNull() ?: return false
+                    if (!ClipboardFileStorage.getFileForId(appContext, id).exists()) return false
+                }
                 val inputContentInfo = InputContentInfoCompat(
-                    item.uri,
+                    mediaUri,
                     ClipDescription("clipboard media file", mimeTypes.toTypedArray()),
                     null,
                 )
                 val ic = currentInputConnection() ?: return false
-                ic.finishComposingText()
-                val flags = InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
-                InputConnectionCompat.commitContent(ic, activeInfo.base, inputContentInfo, flags, null)
+                // Some receivers cannot obtain a read grant for an external URI.
+                // In that case report failure instead of crashing the IME.
+                runCatching {
+                    ic.finishComposingText()
+                    val flags = InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
+                    InputConnectionCompat.commitContent(ic, activeInfo.base, inputContentInfo, flags, null)
+                }.getOrDefault(false)
             }
         }.also {
             if (prefs.clipboard.historyHideOnPaste.get()) {
