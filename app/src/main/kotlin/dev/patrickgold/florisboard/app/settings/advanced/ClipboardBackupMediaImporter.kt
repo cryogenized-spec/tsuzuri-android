@@ -25,6 +25,45 @@ import org.florisboard.lib.kotlin.io.subFile
  * reporting restore success.
  */
 internal object ClipboardBackupMediaImporter {
+    /**
+     * Preflight before resetting preferences or clipboard history. Never trust
+     * an archive path derived from an unvalidated URI, even when restoring only
+     * a subset of the backup's clipboard content.
+     */
+    fun validate(
+        archiveClipboardDir: FsFile,
+        archivePackage: String,
+        archiveVersion: Int,
+        items: List<ClipboardItem>,
+        type: ItemType,
+    ) {
+        val segment = when (type) {
+            ItemType.IMAGE -> "images"
+            ItemType.VIDEO -> "videos"
+            else -> throw IllegalArgumentException("Invalid backup media type")
+        }
+        val prefix = if (type == ItemType.IMAGE) "image/" else "video/"
+        for (item in items) {
+            if (!ClipboardRetentionPolicy.shouldPersist(item.isSensitive) || item.type != type) continue
+            val reference = RestoreCompatibilityPolicy.normalizeMediaReference(
+                item.uri?.toString(),
+                archivePackage,
+                archiveVersion,
+                segment,
+                ClipboardMediaProvider.AUTHORITY,
+            ) ?: throw IllegalArgumentException("Invalid archive clipboard media reference")
+            val source = archiveClipboardDir.subFile(
+                ClipboardFileStorage.CLIPBOARD_FILES_PATH + "/" + reference.archiveId,
+            )
+            require(source.isFile && source.length() in 1..ClipboardFileStorage.MAX_BACKUP_MEDIA_BYTES) {
+                "Archive clipboard media is missing or exceeds permitted size"
+            }
+            require(item.mimeTypes.any { it.startsWith(prefix) }) {
+                "Archive clipboard media MIME type is invalid"
+            }
+        }
+    }
+
     suspend fun prepare(
         context: Context,
         archiveClipboardDir: FsFile,

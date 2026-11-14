@@ -94,7 +94,7 @@ object ClipboardFileStorage {
         }
     }
 
-    private const val MAX_BACKUP_MEDIA_BYTES = 64L * 1024L * 1024L
+    internal const val MAX_BACKUP_MEDIA_BYTES = 64L * 1024L * 1024L
 
     /**
      * Insert file from backup if not existing
