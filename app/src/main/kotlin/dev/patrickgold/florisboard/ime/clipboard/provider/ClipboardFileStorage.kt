@@ -63,6 +63,40 @@ object ClipboardFileStorage {
 
 
     /**
+     * Restore a media payload into a newly allocated, app-owned ID. Never reuse
+     * an archive ID: it may collide with a file the user already has.
+     *
+     * Must be called from a background dispatcher. The restored metadata is
+     * registered separately by the caller after this copy succeeds.
+     */
+    @Synchronized
+    fun importMediaFromBackup(context: Context, source: FsFile): Long {
+        require(source.isFile) { "Backup media file is missing" }
+        val size = source.length()
+        require(size in 1..MAX_BACKUP_MEDIA_BYTES) { "Backup media exceeds the permitted size" }
+
+        var id: Long
+        var destination: FsFile
+        do {
+            id = System.nanoTime() and Long.MAX_VALUE
+            destination = context.clipboardFilesDir.subFile(id.toString())
+        } while (id == 0L || destination.exists())
+
+        try {
+            source.copyTo(destination, overwrite = false)
+            require(destination.isFile && destination.length() == size) {
+                "Imported media is incomplete"
+            }
+            return id
+        } catch (error: Throwable) {
+            destination.delete()
+            throw error
+        }
+    }
+
+    private const val MAX_BACKUP_MEDIA_BYTES = 64L * 1024L * 1024L
+
+    /**
      * Insert file from backup if not existing
      *
      * @param context the application context

@@ -36,6 +36,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.florisboard.lib.kotlin.tryOrNull
 import androidx.core.net.toUri
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Allows apps to access images and videos on the clipboard.
@@ -45,11 +46,22 @@ import androidx.core.net.toUri
  */
 class ClipboardMediaProvider : ContentProvider() {
     private var clipboardFilesDao: ClipboardFilesDao? = null
-    private val cachedFileInfos: HashMap<Long, ClipboardFileInfo> = hashMapOf()
+    private val cachedFileInfos: ConcurrentHashMap<Long, ClipboardFileInfo> = ConcurrentHashMap()
     private val ioScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     companion object {
         const val AUTHORITY = "${BuildConfig.APPLICATION_ID}.provider.clipboard"
+
+        // Restores may happen while the provider is already alive. Preserve
+        // MIME metadata until onCreate reloads persisted rows after restart.
+        private val recentlyRestored = ConcurrentHashMap<Long, ClipboardFileInfo>()
+        internal fun registerRestored(info: ClipboardFileInfo) {
+            recentlyRestored[info.id] = info
+        }
+        internal fun forgetRestored(id: Long) {
+            recentlyRestored.remove(id)
+        }
+
         val IMAGE_CLIPS_URI: Uri = "content://$AUTHORITY/clips/images".toUri()
         val VIDEO_CLIPS_URI: Uri = "content://$AUTHORITY/clips/videos".toUri()
 
@@ -108,7 +120,8 @@ class ClipboardMediaProvider : ContentProvider() {
     override fun getType(uri: Uri): String? {
         return when (Matcher.match(uri)) {
             IMAGE_CLIP_ITEM, VIDEO_CLIP_ITEM -> {
-                cachedFileInfos.getOrDefault(ContentUris.parseId(uri), null)?.mimeTypes?.getOrNull(0)
+                val id = ContentUris.parseId(uri)
+                (cachedFileInfos[id] ?: recentlyRestored[id])?.mimeTypes?.getOrNull(0)
             }
             IMAGE_CLIPS_TABLE -> "${ContentResolver.CURSOR_DIR_BASE_TYPE}/vnd.florisboard.image_clip_table"
             VIDEO_CLIPS_TABLE -> "${ContentResolver.CURSOR_DIR_BASE_TYPE}/vnd.florisboard.video_clip_table"
@@ -119,7 +132,8 @@ class ClipboardMediaProvider : ContentProvider() {
     override fun getStreamTypes(uri: Uri, mimeTypeFilter: String): Array<String>? {
         return when (Matcher.match(uri)) {
             IMAGE_CLIP_ITEM, VIDEO_CLIP_ITEM -> {
-                cachedFileInfos.getOrDefault(ContentUris.parseId(uri), null)?.mimeTypes?.toTypedArray()
+                val id = ContentUris.parseId(uri)
+                (cachedFileInfos[id] ?: recentlyRestored[id])?.mimeTypes?.toTypedArray()
             }
             else -> null
         }
@@ -180,6 +194,7 @@ class ClipboardMediaProvider : ContentProvider() {
                 val id = ContentUris.parseId(uri)
                 ClipboardFileStorage.deleteById(context!!, id)
                 cachedFileInfos.remove(id)
+                forgetRestored(id)
                 context?.revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 ioScope.launch {
                     clipboardFilesDao?.delete(id)
