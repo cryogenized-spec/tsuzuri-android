@@ -19,7 +19,7 @@ package dev.patrickgold.florisboard.ime.text.dictation
 import dev.patrickgold.florisboard.ime.text.dictation.dictionary.CloudVocabularyField
 import dev.patrickgold.florisboard.ime.text.dictation.dictionary.CloudVocabularyHints
 import dev.patrickgold.florisboard.ime.text.network.withCancellableHttpConnection
-import dev.patrickgold.florisboard.lib.util.NetworkUtils
+import dev.patrickgold.florisboard.ime.text.network.SecureEndpointPolicy
 import dev.patrickgold.florisboard.lib.util.OwnkeyBatteryTraceLabels
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -231,8 +231,8 @@ class VoxtralRelayTranscriptionClient(
         }
 
         val endpointUrl = endpointUrlProvider().trim().ifBlank { DefaultEndpointUrl }
-        if (!NetworkUtils.hasHttpScheme(endpointUrl)) {
-            return Result.failure(IllegalStateException("Endpoint URL must start with https:// or http://"))
+        if (!SecureEndpointPolicy.isAllowed(endpointUrl)) {
+            return Result.failure(IllegalStateException("Remote transcription endpoint must use HTTPS without embedded credentials."))
         }
 
         val model = modelProvider().trim().ifBlank { DefaultModel }

@@ -16,6 +16,7 @@
 
 package dev.patrickgold.florisboard.ime.text.rewrite
 
+import dev.patrickgold.florisboard.ime.text.network.SecureEndpointPolicy
 import dev.patrickgold.florisboard.ime.text.network.withCancellableHttpConnection
 import dev.patrickgold.florisboard.lib.util.OwnkeyBatteryTraceLabels
 import kotlinx.coroutines.CancellationException
@@ -120,8 +121,8 @@ class LlmRewriteClient(
         }
 
         val endpointUrl = resolved.endpointUrl
-        if (!resolved.hasHttpEndpoint) {
-            return Result.failure(IllegalStateException("LLM endpoint URL must start with https:// or http://"))
+        if (!SecureEndpointPolicy.isAllowed(endpointUrl)) {
+            return Result.failure(IllegalStateException("Remote rewrite endpoint must use HTTPS without embedded credentials."))
         }
 
         val model = resolved.model

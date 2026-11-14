@@ -37,3 +37,17 @@ This repository uses the Delano runtime installed under `.agents/` and project c
 - Project registry: `.project/registry/`
 
 Do not publish secrets, raw prompt text, or machine-specific absolute paths in repo docs, contracts, logs, or generated artifacts.
+
+## Code Review Rules (Tsuzuri)
+
+### Input and concurrency boundary
+The IME must never drop, duplicate or reorder committed text when users type rapidly, backspace, switch apps, or cancel composition. Flag any asynchronous callback that can write state after a newer event, or any unbounded work on the input/UI thread. New concurrent state transitions need deterministic tests.
+
+### Clipboard and privacy boundary
+Sensitive clips, password/incognito fields, vault secrets and private snippets must not be persisted to normal clipboard history, searchable indexes, backup, crash logs, telemetry or remote endpoints without a deliberate scoped action. Flag any clipboard capture/restore/pin race or over-broad content URI grant. The default is fail-closed.
+
+### BYOK network boundary
+No network call may start from routine typing. Only user-triggered dictation/rewrite/image generation may send data; secret-bearing endpoints require HTTPS, with visible destination and no hidden fallback provider. Reject debug keys or embedded credentials and audit error logs for leaked content.
+
+### Approval gate
+Do not approve a merge with missing or failed CI, unreviewed changed Kotlin, unresolved P0/P1 issues or incomplete sensitive-data threat analysis. Codex review is an independent input, not a substitute for deterministic tests and explicit human approval.

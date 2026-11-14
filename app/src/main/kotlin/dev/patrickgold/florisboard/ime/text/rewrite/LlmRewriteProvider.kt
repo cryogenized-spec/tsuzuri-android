@@ -18,7 +18,7 @@ package dev.patrickgold.florisboard.ime.text.rewrite
 
 import androidx.annotation.StringRes
 import dev.patrickgold.florisboard.R
-import dev.patrickgold.florisboard.lib.util.NetworkUtils
+import dev.patrickgold.florisboard.ime.text.network.SecureEndpointPolicy
 
 data class LlmRewriteProviderPreset(
     val id: String,
@@ -46,8 +46,8 @@ data class ResolvedRewriteProvider(
     /** A custom endpoint has no defaults, so it can only send requests once both fields are filled in. */
     val isComplete: Boolean get() = endpointUrl.isNotBlank() && model.isNotBlank()
 
-    /** Requests only go to http(s) URLs, so an endpoint typed without a scheme can't be used. */
-    val hasHttpEndpoint: Boolean get() = NetworkUtils.hasHttpScheme(endpointUrl)
+    /** Kept for settings compatibility; now accepts HTTPS endpoints only. */
+    val hasHttpEndpoint: Boolean get() = SecureEndpointPolicy.isAllowed(endpointUrl)
 }
 
 object LlmRewriteProviders {

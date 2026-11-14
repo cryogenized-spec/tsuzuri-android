@@ -102,6 +102,7 @@ class ClipboardManager(
     val currentHistory: ClipboardHistory
         get() = historyFlow.value
 
+    private val clipboardEventGeneration = ClipboardEventGeneration()
     private val primaryClipLastFromCallbackGuard = Mutex(locked = false)
     private var primaryClipLastFromCallback: ClipData? = null
     val primaryClipFlow: StateFlow<ClipboardItem?>
@@ -202,10 +203,12 @@ class ClipboardManager(
      * Called by system clipboard when the system primary clip has changed.
      */
     override fun onPrimaryClipChanged() {
+        val callbackGeneration = clipboardEventGeneration.next()
         val syncBehavior = prefs.clipboard.syncToFloris.get()
         if (!prefs.clipboard.useInternalClipboard.get() || syncBehavior != ClipboardSyncBehavior.NO_EVENTS) {
             val systemPrimaryClip = systemClipboardManager.primaryClip
             ioScope.launch {
+                if (!clipboardEventGeneration.isCurrent(callbackGeneration)) return@launch
                 val isDuplicate: Boolean
                 primaryClipLastFromCallbackGuard.withLock {
                     val a = primaryClipLastFromCallback?.getItemAt(0)
@@ -217,7 +220,7 @@ class ClipboardManager(
                     }
                     primaryClipLastFromCallback = systemPrimaryClip
                 }
-                if (isDuplicate) return@launch
+                if (isDuplicate || !clipboardEventGeneration.isCurrent(callbackGeneration)) return@launch
 
                 val internalPrimaryClip = primaryClip
 
@@ -242,6 +245,10 @@ class ClipboardManager(
                 val isEqual = internalPrimaryClip?.isEqualTo(systemPrimaryClip) == true
                 if (!isEqual) {
                     val item = ClipboardItem.fromClipData(appContext, systemPrimaryClip, cloneUri = true)
+                    if (!clipboardEventGeneration.isCurrent(callbackGeneration)) {
+                        item.close(appContext)
+                        return@launch
+                    }
                     primaryClip = item
                     insertOrMoveBeginning(item)
                 }
@@ -269,6 +276,7 @@ class ClipboardManager(
      * Adds a new item to the clipboard history (if enabled).
      */
     private fun insertOrMoveBeginning(newItem: ClipboardItem) {
+        if (!ClipboardRetentionPolicy.shouldPersist(newItem.isSensitive)) return
         if (prefs.clipboard.historyEnabled.get()) {
             val historyElement = currentHistory.all.firstOrNull { item ->
                 item.type == ItemType.TEXT && item.text == newItem.text && item.isSensitive == newItem.isSensitive
@@ -330,6 +338,7 @@ class ClipboardManager(
     }
 
     fun insertClip(item: ClipboardItem) {
+        if (!ClipboardRetentionPolicy.shouldPersist(item.isSensitive)) return
         ioScope.launch {
             val id = clipHistoryDao?.insert(item)
             item.id = id ?: 0
