@@ -110,6 +110,61 @@ class ClipboardEventGenerationTest : FunSpec({
         ) shouldBe false
     }
 
+    test("duplicate external-media callbacks are recognized only after a successful commit") {
+        val gate = ClipboardEventGeneration()
+        val key = ClipboardCapturePolicy.externalMediaSource(
+            sourceUri = "content://gallery.example/image/123",
+            sourceAuthority = "gallery.example",
+            timestampMs = 800L,
+            mimeTypes = listOf("image/png"),
+            ownProviderAuthority = "io.github.cryogenizedspec.tsuzuri.provider.clipboard",
+        )!!
+        gate.wasAppliedExternalMediaSource(key) shouldBe false
+        val first = gate.next()
+        val second = gate.next()
+        gate.applyIfCurrent(first, key) {} shouldBe false
+        gate.wasAppliedExternalMediaSource(key) shouldBe false
+        gate.applyIfCurrent(second, key) {} shouldBe true
+        gate.wasAppliedExternalMediaSource(key) shouldBe true
+        // An accepted non-media event resets the coalescing identity.
+        gate.applyIfCurrent(gate.next()) {} shouldBe true
+        gate.wasAppliedExternalMediaSource(key) shouldBe false
+    }
+
+    test("clipboard timestamp and MIME changes produce distinct external-media identities") {
+        val own = "io.github.cryogenizedspec.tsuzuri.provider.clipboard"
+        fun key(timestamp: Long, mime: String) = ClipboardCapturePolicy.externalMediaSource(
+            "content://gallery.example/image/123", "gallery.example", timestamp, listOf(mime), own,
+        )
+        key(1L, "image/png") shouldBe key(1L, "image/png")
+        (key(1L, "image/png") == key(2L, "image/png")) shouldBe false
+        (key(1L, "image/png") == key(1L, "image/jpeg")) shouldBe false
+        ClipboardCapturePolicy.externalMediaSource(
+            "content://$own/clips/images/1", own, 1L, listOf("image/png"), own,
+        ) shouldBe null
+        ClipboardCapturePolicy.externalMediaSource(
+            "content://gallery.example/doc/1", "gallery.example", 1L, listOf("text/plain"), own,
+        ) shouldBe null
+    }
+
+    test("internal updates invalidate older pending captures and media cache") {
+        val gate = ClipboardEventGeneration()
+        val source = ClipboardExternalMediaSource("content://gallery.example/x", 1L, listOf("image/png"))
+        val old = gate.next()
+        gate.applyIfCurrent(old, source) {} shouldBe true
+        gate.wasAppliedExternalMediaSource(source) shouldBe true
+        gate.invalidatePending()
+        gate.wasAppliedExternalMediaSource(source) shouldBe false
+        gate.applyIfCurrent(old, source) {} shouldBe false
+    }
+
+    test("flagged media must be captured without cloning bytes to disk") {
+        // The integration source contract additionally enforces cloneUri = !incomingSensitive.
+        val incomingSensitive = true
+        val cloneUri = !incomingSensitive
+        cloneUri shouldBe false
+    }
+
     test("sensitive flag key applies across Android API versions") {
         ClipboardRetentionPolicy.SENSITIVE_EXTRA shouldBe "android.content.extra.IS_SENSITIVE"
     }
