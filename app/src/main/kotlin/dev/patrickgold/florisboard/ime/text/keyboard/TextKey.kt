@@ -17,6 +17,7 @@
 package dev.patrickgold.florisboard.ime.text.keyboard
 
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
+import dev.patrickgold.florisboard.app.settings.symbols.SymbolShortcutStore
 import dev.patrickgold.florisboard.ime.keyboard.AbstractKeyData
 import dev.patrickgold.florisboard.ime.keyboard.ComputingEvaluator
 import dev.patrickgold.florisboard.ime.keyboard.Key
@@ -113,6 +114,27 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
                 computedPopups.apply {
                     keySpecificPopupSet?.let { merge(it, evaluator) }
                     popupSet?.let { merge(it, evaluator) }
+                }
+                // Keep inherited language-specific accents intact. User-saved
+                // Unicode choices are appended to the existing long-press popup,
+                // only in ordinary text fields (never passwords, URLs or email).
+                if (keyboardMode == KeyboardMode.CHARACTERS &&
+                    kv == KeyVariation.NORMAL &&
+                    computed.type == KeyType.CHARACTER &&
+                    computed.groupId == KeyData.GROUP_DEFAULT
+                ) {
+                    val existingSymbols = computedPopups.relevant
+                        .map { it.asString(isForDisplay = false) }.toSet()
+                    for (symbol in SymbolShortcutStore.forKey(computedLabel)) {
+                        if (symbol in existingSymbols) continue
+                        val points = symbol.codePoints().toArray()
+                        val keyData: KeyData = if (points.size == 1) {
+                            TextKeyData(type = KeyType.CHARACTER, code = points[0], label = symbol)
+                        } else {
+                            MultiTextKeyData(type = KeyType.CHARACTER, codePoints = points, label = symbol)
+                        }
+                        computedPopups.relevant.add(keyData)
+                    }
                 }
                 if (computed.type == KeyType.CHARACTER) {
                     addComputedHints(computed.code, evaluator, extendedPopups, extendedPopupsDefault)

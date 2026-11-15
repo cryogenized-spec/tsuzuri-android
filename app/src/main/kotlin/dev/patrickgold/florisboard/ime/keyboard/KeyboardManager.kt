@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import dev.patrickgold.florisboard.FlorisImeService
 import dev.patrickgold.florisboard.R
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
+import dev.patrickgold.florisboard.app.settings.symbols.SymbolShortcutStore
 import dev.patrickgold.florisboard.appContext
 import dev.patrickgold.florisboard.dictationFixController
 import dev.patrickgold.florisboard.clipboardManager
@@ -154,7 +155,13 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     ).also { it.keyEventReceiver = this }
 
     init {
+        SymbolShortcutStore.ensureLoaded(appContext)
         scope.launch(Dispatchers.Main.immediate) {
+            // A saved key assignment becomes active immediately; no IME
+            // restart, JSON import or keyboard-cache purge is required.
+            SymbolShortcutStore.revision.collectLatestIn(scope) {
+                updateActiveEvaluators()
+            }
             resources.anyChangedVersion.collectIn(scope) {
                 updateActiveEvaluators {
                     keyboardCache.clear()
