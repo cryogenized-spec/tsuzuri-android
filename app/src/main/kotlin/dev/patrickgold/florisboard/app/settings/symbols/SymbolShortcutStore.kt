@@ -152,6 +152,70 @@ internal object SymbolShortcutStore {
             }
         }
 
+    suspend fun setOptions(context: Context, updated: SymbolPopupOptions): Boolean =
+        withContext(Dispatchers.IO) {
+            storageMutex.withLock {
+                loadLocked(context)
+                val preferences = context.applicationContext.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+                val saved = preferences.edit()
+                    .putBoolean(PREF_SHOW_ACCENTS, updated.showAccents)
+                    .putString(PREF_POPUP_PRIORITY, updated.priority.name)
+                    .commit()
+                if (saved) {
+                    popupOptions = updated
+                    revision.value += 1
+                }
+                saved
+            }
+        }
+
+    /** Changes order without changing the bound Unicode characters. */
+    suspend fun move(context: Context, rawKey: String, symbol: String, offset: Int): Boolean =
+        withContext(Dispatchers.IO) {
+            val key = keyOf(rawKey) ?: return@withContext false
+            storageMutex.withLock {
+                loadLocked(context)
+                val current = cached[key].orEmpty()
+                val from = current.indexOf(symbol)
+                val to = from + offset
+                if (from < 0 || to !in current.indices) false
+                else writeLocked(context, key, current.toMutableList().apply {
+                    add(to, removeAt(from))
+                })
+            }
+        }
+
+    /** Atomically apply a fully validated AI proposal, only after explicit user approval. */
+    suspend fun replaceApproved(context: Context, changes: Map<String, List<String>>): Boolean =
+        withContext(Dispatchers.IO) {
+            if (changes.isEmpty() || changes.size > 26) return@withContext false
+            val verified = LinkedHashMap<String, List<String>>()
+            for ((rawKey, rawSymbols) in changes) {
+                val key = keyOf(rawKey) ?: return@withContext false
+                val symbols = rawSymbols.map { decodeUserInput(it) ?: return@withContext false }
+                if (symbols.size > MAX_SHORTCUTS_PER_KEY ||
+                    symbols.distinct().size != symbols.size || key in verified) return@withContext false
+                verified[key] = symbols
+            }
+            storageMutex.withLock {
+                loadLocked(context)
+                val preferences = context.applicationContext.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+                val editor = preferences.edit()
+                for ((key, symbols) in verified) {
+                    if (symbols.isEmpty()) editor.remove(key)
+                    else editor.putString(key, symbols.joinToString(DELIMITER))
+                }
+                if (!editor.commit()) return@withLock false
+                cached = cached.toMutableMap().apply {
+                    for ((key, symbols) in verified) {
+                        if (symbols.isEmpty()) remove(key) else put(key, symbols.toList())
+                    }
+                }.toMap()
+                revision.value += 1
+                true
+            }
+        }
+
     suspend fun remove(context: Context, rawKey: String, symbol: String): Boolean =
         withContext(Dispatchers.IO) {
             val key = keyOf(rawKey) ?: return@withContext false
