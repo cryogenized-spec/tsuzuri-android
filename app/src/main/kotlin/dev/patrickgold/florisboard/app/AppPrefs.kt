@@ -87,6 +87,16 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         const val NAME = "florisboard-app-prefs"
     }
 
+    // Opt-in pre-screen editing preferences. Approved category counts only;
+    // drafts and model-generated text are never saved to preference storage.
+    val preScreen = PreScreen()
+    inner class PreScreen {
+        val suggestionCount = int(key = "prescreen__suggestion_count", default = 3)
+        val learningEnabled = boolean(key = "prescreen__learning_enabled", default = false)
+        val learnedKinds = string(key = "prescreen__learned_kinds", default = "{}")
+        val diffColor = string(key = "prescreen__diff_color", default = "43A047")
+    }
+
     val clipboard = Clipboard()
     inner class Clipboard {
         val useInternalClipboard = boolean(
