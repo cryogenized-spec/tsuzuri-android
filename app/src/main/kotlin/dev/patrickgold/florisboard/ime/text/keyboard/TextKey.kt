@@ -17,6 +17,8 @@
 package dev.patrickgold.florisboard.ime.text.keyboard
 
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
+import dev.patrickgold.florisboard.app.settings.symbols.SymbolShortcutStore
+import dev.patrickgold.florisboard.app.settings.symbols.SymbolPopupArrangement
 import dev.patrickgold.florisboard.ime.keyboard.AbstractKeyData
 import dev.patrickgold.florisboard.ime.keyboard.ComputingEvaluator
 import dev.patrickgold.florisboard.ime.keyboard.Key
@@ -44,6 +46,7 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
     var computedDataOnDown: KeyData = TextKeyData.UNSPECIFIED
 
     fun compute(evaluator: ComputingEvaluator) {
+        val prefs by FlorisPreferenceStore
         val keyboard = evaluator.keyboard as? TextKeyboard ?: return
         val keyboardMode = keyboard.mode
         val computed = data.compute(evaluator)
@@ -113,6 +116,84 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
                 computedPopups.apply {
                     keySpecificPopupSet?.let { merge(it, evaluator) }
                     popupSet?.let { merge(it, evaluator) }
+                }
+                // Keep inherited language-specific accents intact. User-saved
+                // Unicode choices are appended to the existing long-press popup,
+                // only in ordinary text fields (never passwords, URLs or email).
+                if (keyboardMode == KeyboardMode.CHARACTERS &&
+                    kv == KeyVariation.NORMAL &&
+                    computed.type == KeyType.CHARACTER &&
+                    computed.groupId == KeyData.GROUP_DEFAULT
+                ) {
+                    if (SymbolShortcutStore.keyOf(computedLabel) != null) {
+                        val options = SymbolShortcutStore.options()
+                        val originalEntries = listOfNotNull(computedPopups.main) + computedPopups.relevant
+                        val customEntries: List<KeyData> = SymbolShortcutStore.forKey(computedLabel).map { symbol ->
+                            val points = symbol.codePoints().toArray()
+                            if (points.size == 1) {
+                                TextKeyData(type = KeyType.CHARACTER, code = points[0], label = symbol)
+                            } else {
+                                MultiTextKeyData(type = KeyType.CHARACTER, codePoints = points, label = symbol)
+                            }
+                        }
+                        if (options.priority == dev.patrickgold.florisboard.app.settings.symbols.SymbolPopupPriority.ORIGINAL) {
+                            // Never promote inherited 'relevant' accents to 'main' in
+                            // Original mode. That would silently change hint
+                            // priority (e.g. number hints on English E).
+                            if (!options.showAccents) {
+                                computedPopups.main?.let { main ->
+                                    if (SymbolShortcutStore.isAccentVariant(
+                                            computedLabel, main.asString(isForDisplay = false),
+                                        )
+                                    ) computedPopups.main = null
+                                }
+                                computedPopups.relevant.removeAll { item ->
+                                    SymbolShortcutStore.isAccentVariant(
+                                        computedLabel, item.asString(isForDisplay = false),
+                                    )
+                                }
+                            }
+                            val seen = (listOfNotNull(computedPopups.main) + computedPopups.relevant)
+                                .map { it.asString(isForDisplay = false) }.toMutableSet()
+                            for (item in customEntries) {
+                                if (seen.add(item.asString(isForDisplay = false))) {
+                                    computedPopups.relevant.add(item)
+                                }
+                            }
+                        } else {
+                            val arranged = SymbolPopupArrangement.arrange(
+                                key = computedLabel,
+                                inherited = originalEntries,
+                                custom = customEntries,
+                                options = options,
+                                label = { it.asString(isForDisplay = false) },
+                            )
+                            computedPopups.main = arranged.firstOrNull()
+                            computedPopups.relevant.clear()
+                            computedPopups.relevant.addAll(arranged.drop(1))
+                        }
+                    }
+                }
+                // Preserve inherited accents and custom Unicode choices while
+                // adding familiar editing actions for ordinary text fields.
+                if (keyboardMode == KeyboardMode.CHARACTERS &&
+                    kv == KeyVariation.NORMAL &&
+                    computed.type == KeyType.CHARACTER &&
+                    computed.groupId == KeyData.GROUP_DEFAULT &&
+                    evaluator.editorInfo.isRichInputEditor &&
+                    prefs.keyboard.editingShortcutsEnabled.get()
+                ) {
+                    val action = TextEditingShortcuts.dataFor(
+                        computedLabel, kv, evaluator.editorInfo.isRichInputEditor,
+                        prefs.keyboard.editingShortcutsEnabled.get(),
+                        evaluator.state.isSelectionMode,
+                    )
+                    // Popup actions bypass the normal key's enabled state;
+                    // apply the same action eligibility check to them.
+                    if (action != null && evaluator.evaluateEnabled(action) &&
+                        computedPopups.relevant.none { it.code == action.code }) {
+                        computedPopups.relevant.add(action)
+                    }
                 }
                 if (computed.type == KeyType.CHARACTER) {
                     addComputedHints(computed.code, evaluator, extendedPopups, extendedPopupsDefault)

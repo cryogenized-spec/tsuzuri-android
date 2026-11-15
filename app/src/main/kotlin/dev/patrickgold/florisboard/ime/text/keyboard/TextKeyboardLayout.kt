@@ -55,6 +55,7 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -171,8 +172,10 @@ fun TextKeyboardLayout(
     val glideTrailStyle = rememberSnyggThemeQuery(FlorisImeUi.GlideTrail.elementName)
     val glideTrailColor = glideTrailStyle.foreground(default = Color.Green)
 
+    var dpadVisible by remember { mutableStateOf(false) }
     val controller = remember { TextKeyboardLayoutController(context) }.also {
         it.keyboard = keyboard
+        it.onDpadRequested = { dpadVisible = true }
         if (keyboard.mode == KeyboardMode.CHARACTERS) {
             val keys = keyboard.keys().asSequence().toList()
             KeyboardGeometrySource.update(keys)
@@ -204,8 +207,15 @@ fun TextKeyboardLayout(
 
     DisposableLifecycleEffect(
         onResume = { /* Do nothing */ },
-        onPause = { resetAllKeys() },
+        onPause = {
+            resetAllKeys()
+            dpadVisible = false
+        },
     )
+
+    LaunchedEffect(dpadVisible) {
+        if (dpadVisible) resetAllKeys()
+    }
 
     BoxWithConstraints(
         modifier = modifier
@@ -215,7 +225,7 @@ fun TextKeyboardLayout(
                 controller.size = coords.size.toSize()
                 keyboardBounds = coords.boundsInRoot()
             }
-            .pointerInteropFilter { event ->
+            .then(if (dpadVisible) Modifier else Modifier.pointerInteropFilter { event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN,
                     MotionEvent.ACTION_POINTER_DOWN,
@@ -236,7 +246,7 @@ fun TextKeyboardLayout(
                     }
                 }
                 return@pointerInteropFilter false
-            }
+            })
             .drawWithContent {
                 drawContent()
                 if (glideEnabled && glideShowTrail) {
@@ -385,17 +395,35 @@ fun TextKeyboardLayout(
         popupUiController.keyHintConfiguration = prefs.keyboard.keyHintConfiguration()
         controller.popupUiController = popupUiController
         val debugShowTouchBoundaries by prefs.devtools.showKeyTouchBoundaries.collectAsState()
-        for (textKey in keyboard.keys()) {
-            TextKeyButton(
-                textKey,
-                evaluator,
-                desiredKey,
-                debugShowTouchBoundaries,
-                showVoiceRecordingIndicator,
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                // Blur(0.dp) still clips popup layers: skip the modifier
+                // entirely during normal typing so accents aren't cut off.
+                .then(if (dpadVisible) Modifier.blur(8.dp) else Modifier),
+        ) {
+            for (textKey in keyboard.keys()) {
+                TextKeyButton(
+                    textKey,
+                    evaluator,
+                    desiredKey,
+                    debugShowTouchBoundaries,
+                    showVoiceRecordingIndicator,
+                )
+            }
+            popupUiController.RenderPopups()
+        }
+        if (dpadVisible) {
+            CursorDpadOverlay(
+                onMove = { direction ->
+                    // Emoji-search text belongs to the IME, not the host editor.
+                    if (!keyboardManager.emojiSearch.isActive) {
+                        keyboardManager.handleArrow(direction)
+                    }
+                },
+                onDismiss = { dpadVisible = false },
             )
         }
-
-        popupUiController.RenderPopups()
     }
 
     LaunchedEffect(Unit) {
@@ -452,6 +480,8 @@ private fun TextKeyButton(
                     defaultLabel = label,
                     recognitionCueLabel = rememberDictationRecognitionCueLabel(),
                 ) ?: return@let
+                val dpadEnabled by prefs.keyboard.spacebarDpadEnabled.collectAsState()
+                if (dpadEnabled) customLabel = "$customLabel · ⊕"
             }
             SnyggText(
                 modifier = Modifier
@@ -545,6 +575,7 @@ private class TextKeyboardLayoutController(
     private val keyHintConfiguration = prefs.keyboard.keyHintConfiguration()
     private val pointerMap: PointerMap<TouchPointer> = PointerMap { TouchPointer() }
     lateinit var popupUiController: PopupUiController
+    var onDpadRequested: () -> Unit = { }
 
     private var initSelectionStart: Int = 0
     private var initSelectionEnd: Int = 0
@@ -709,6 +740,12 @@ private class TextKeyboardLayoutController(
                     pointer.hasTriggeredLongPress = true
                     when (key.computedData.code) {
                         KeyCode.SPACE, KeyCode.CJK_SPACE -> {
+                            if (prefs.keyboard.spacebarDpadEnabled.get() &&
+                                !keyboardManager.emojiSearch.isActive
+                            ) {
+                                onDpadRequested()
+                                return@onLongPress true
+                            }
                             when (prefs.gestures.spaceBarLongPress.get()) {
                                 SwipeAction.NO_ACTION,
                                 SwipeAction.INSERT_SPACE -> {

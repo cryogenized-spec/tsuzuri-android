@@ -38,6 +38,7 @@ import dev.patrickgold.florisboard.ime.clipboard.provider.ItemType
 import dev.patrickgold.florisboard.ime.input.InputShiftState
 import dev.patrickgold.florisboard.ime.keyboard.IncognitoMode
 import dev.patrickgold.florisboard.ime.keyboard.KeyboardMode
+import dev.patrickgold.florisboard.ime.media.stickers.StickerStore
 import dev.patrickgold.florisboard.ime.nlp.SuggestionCandidate
 import dev.patrickgold.florisboard.ime.text.composing.Appender
 import dev.patrickgold.florisboard.ime.text.composing.Composer
@@ -440,6 +441,52 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      *
      * @return True on success, false if something went wrong.
      */
+    /**
+     * Send one locally stored static sticker as image/png. The receiver must
+     * explicitly advertise support through Android's EditorInfo MIME types.
+     * No text, network call or clipboard fallback is performed implicitly.
+     */
+    fun canUseStickerMedia(): Boolean {
+        val attributes = activeInfo.inputAttributes
+        return activeInputSessionId != 0L &&
+            attributes.type == InputAttributes.Type.TEXT &&
+            attributes.variation !in setOf(
+                InputAttributes.Variation.PASSWORD,
+                InputAttributes.Variation.VISIBLE_PASSWORD,
+                InputAttributes.Variation.WEB_PASSWORD,
+                InputAttributes.Variation.EMAIL_ADDRESS,
+                InputAttributes.Variation.WEB_EMAIL_ADDRESS,
+                InputAttributes.Variation.URI,
+            ) &&
+            activeState.keyVariation == KeyVariation.NORMAL &&
+            !activeInfo.isRawInputEditor
+    }
+
+    fun commitSticker(id: String): Boolean {
+        if (!canUseStickerMedia()) return false
+        val item = StickerStore.find(id) ?: return false
+        val contentUri = try {
+            StickerStore.uriFor(appContext, item)
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        val connection = currentInputConnection() ?: return false
+        return try {
+            val content = InputContentInfoCompat(
+                contentUri,
+                ClipDescription("Tsuzuri sticker", arrayOf("image/png")),
+                null,
+            )
+            connection.finishComposingText()
+            InputConnectionCompat.commitContent(
+                connection, activeInfo.base, content,
+                InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null,
+            )
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun commitClipboardItem(item: ClipboardItem?): Boolean {
         notifyKeyboardEdit()
         if (item == null) return false
@@ -567,15 +614,20 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      * @return True on success, false if an error occurred or the input connection is invalid.
      */
     fun performClipboardCut(): Boolean {
+        // A long-press popup may outlive the selection that enabled it.
+        // Never turn Cut into a backward-delete on a collapsed cursor.
+        if (!activeContent.selection.isSelectionMode) return false
+        // Confirm against the live editor rather than trusting only the
+        // potentially stale cached selection; a cancelled popup must be safe.
+        val selected = currentInputConnection()?.getSelectedText(0)
+        if (selected.isNullOrEmpty()) return false
         notifyKeyboardEdit()
         autoSpace.setInactive()
         phantomSpace.setInactive()
-        val text = activeContent.selectedText.ifBlank { currentInputConnection()?.getSelectedText(0) }
-        if (text != null) {
-            clipboardManager.addNewPlaintext(text.toString())
-        } else {
-            appContext.showShortToastSync("Failed to retrieve selected text requested to cut: Eiter selection state is invalid or an error occurred within the input connection.")
-        }
+        // Use the keyboard-owned clipboard path for deterministic cut.
+        // An IME context-menu RPC can acknowledge dispatch while the host
+        // silently ignores the command; never report that as success.
+        clipboardManager.addNewPlaintext(selected.toString())
         return deleteBackwards(OperationUnit.CHARACTERS)
     }
 
@@ -586,15 +638,17 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      * @return True on success, false if an error occurred or the input connection is invalid.
      */
     fun performClipboardCopy(): Boolean {
+        if (!activeContent.selection.isSelectionMode) return false
+        // Confirm against the live editor rather than trusting only the
+        // potentially stale cached selection; a cancelled popup must be safe.
+        val selected = currentInputConnection()?.getSelectedText(0)
+        if (selected.isNullOrEmpty()) return false
         notifyKeyboardEdit()
         autoSpace.setInactive()
         phantomSpace.setInactive()
-        val text = activeContent.selectedText.ifBlank { currentInputConnection()?.getSelectedText(0) }
-        if (text != null) {
-            clipboardManager.addNewPlaintext(text.toString())
-        } else {
-            appContext.showShortToastSync("Failed to retrieve selected text requested to copy: Eiter selection state is invalid or an error occurred within the input connection.")
-        }
+        // Keep copy on the proven selection -> clipboard path; host-side
+        // copy requests do not reliably report whether any data was copied.
+        clipboardManager.addNewPlaintext(selected.toString())
         val activeSelection = activeContent.selection
         return setSelection(activeSelection.end, activeSelection.end)
     }
@@ -609,6 +663,10 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         notifyKeyboardEdit()
         autoSpace.setInactive()
         phantomSpace.setInactive()
+        // The native context-menu IPC may return true even when the host
+        // doesn't implement paste. Keep the reliable IME content fallback.
+        // Markdown source text is preserved byte-for-byte as text; rich HTML
+        // clipboard transfer will need an explicit MIME-aware pathway.
         return commitClipboardItem(clipboardManager.primaryClip).also { result ->
             if (!result) {
                 appContext.showShortToastSync("Failed to paste item.")
