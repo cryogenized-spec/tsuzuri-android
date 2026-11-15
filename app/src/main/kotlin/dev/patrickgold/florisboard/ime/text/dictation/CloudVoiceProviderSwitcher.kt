@@ -12,6 +12,14 @@ import kotlinx.coroutines.sync.withLock
  * is shared across cloud dictation providers: a host switch must first commit removal
  * of the old key, and must also clear any still-present legacy plaintext migration key.
  */
+/**
+ * One process-wide lock protects BOTH the settings writer and the dictation session's
+ * key + endpoint + model snapshot. This must not be a new Mutex per screen instance.
+ */
+object CloudVoiceProviderGuard {
+    val mutex = Mutex()
+}
+
 class CloudVoiceProviderSwitcher(
     private val currentEndpoint: suspend () -> String,
     private val durablyEraseKey: suspend () -> Boolean,
@@ -19,7 +27,7 @@ class CloudVoiceProviderSwitcher(
     private val updateEndpoint: suspend (String) -> Unit,
     private val updateModel: suspend (String) -> Unit,
 ) {
-    private val mutex = Mutex()
+    private val mutex = CloudVoiceProviderGuard.mutex
 
     sealed interface SwitchResult {
         data class Applied(val keyCleared: Boolean) : SwitchResult
