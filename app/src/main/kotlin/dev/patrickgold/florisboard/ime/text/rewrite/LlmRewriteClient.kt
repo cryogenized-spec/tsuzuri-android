@@ -238,6 +238,9 @@ class LlmRewriteClient(
             put("model", JsonPrimitive(request.model))
             put("instructions", JsonPrimitive(systemInstruction(request)))
             put("store", JsonPrimitive(false))
+            if (request.structuredSystemInstruction != null) {
+                put("max_output_tokens", JsonPrimitive(4096))
+            }
             put("input", JsonPrimitive(rewriteUserInstruction(request)))
         }
     }
@@ -263,6 +266,9 @@ class LlmRewriteClient(
         return buildJsonObject {
             put("model", JsonPrimitive(request.model))
             put("temperature", JsonPrimitive(0.35))
+            if (request.structuredSystemInstruction != null) {
+                put("max_tokens", JsonPrimitive(4096))
+            }
             put("messages", buildJsonArray {
                 add(
                     buildJsonObject {
