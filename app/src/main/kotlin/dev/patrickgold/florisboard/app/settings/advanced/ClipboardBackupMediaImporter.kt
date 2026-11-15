@@ -25,6 +25,9 @@ import org.florisboard.lib.kotlin.io.subFile
  * reporting restore success.
  */
 internal object ClipboardBackupMediaImporter {
+    private const val MAX_ARCHIVE_MEDIA_BYTES = 256L * 1024L * 1024L
+    private const val MAX_ARCHIVE_MEDIA_ROWS = 999
+
     /**
      * Preflight before resetting preferences or clipboard history. Never trust
      * an archive path derived from an unvalidated URI, even when restoring only
@@ -36,7 +39,13 @@ internal object ClipboardBackupMediaImporter {
         archiveVersion: Int,
         items: List<ClipboardItem>,
         type: ItemType,
-    ) {
+    ): Long {
+        val eligibleCount = items.count {
+            it.type == type && ClipboardRetentionPolicy.shouldPersist(it.isSensitive)
+        }
+        require(eligibleCount <= MAX_ARCHIVE_MEDIA_ROWS) { "Too many media rows in backup" }
+        val observedIds = mutableSetOf<Long>()
+        var combinedBytes = 0L
         val segment = when (type) {
             ItemType.IMAGE -> "images"
             ItemType.VIDEO -> "videos"
@@ -61,7 +70,15 @@ internal object ClipboardBackupMediaImporter {
             require(item.mimeTypes.any { it.startsWith(prefix) }) {
                 "Archive clipboard media MIME type is invalid"
             }
+            if (observedIds.add(reference.archiveId)) {
+                val fileSize = source.length()
+                require(combinedBytes <= MAX_ARCHIVE_MEDIA_BYTES - fileSize) {
+                    "Archive clipboard media exceeds aggregate size budget"
+                }
+                combinedBytes += fileSize
+            }
         }
+        return combinedBytes
     }
 
     suspend fun prepare(
@@ -72,6 +89,8 @@ internal object ClipboardBackupMediaImporter {
         items: List<ClipboardItem>,
         type: ItemType,
     ): List<ClipboardItem> = withContext(Dispatchers.IO) {
+        // Preflight also protects direct callers that bypass RestoreScreen.
+        validate(archiveClipboardDir, archivePackage, archiveVersion, items, type)
         val segment = when (type) {
             ItemType.IMAGE -> "images"
             ItemType.VIDEO -> "videos"
@@ -85,6 +104,7 @@ internal object ClipboardBackupMediaImporter {
         }
         val database = ClipboardFilesDatabase.new(context.applicationContext)
         val importedIds = mutableListOf<Long>()
+        val mappedIds = mutableMapOf<Long, Long>()
         try {
             val prepared = mutableListOf<ClipboardItem>()
             for (item in items) {
@@ -107,17 +127,21 @@ internal object ClipboardBackupMediaImporter {
                 val mimeTypes = item.mimeTypes.filter { it.startsWith(mediaPrefix) }
                 require(mimeTypes.isNotEmpty()) { "Archive clipboard media MIME type is invalid" }
 
-                val newId = ClipboardFileStorage.importMediaFromBackup(context, sourceFile)
-                importedIds.add(newId)
-                val info = ClipboardFileInfo(
-                    id = newId,
-                    displayName = "Restored clipboard " + segment,
-                    size = sourceFile.length(),
-                    orientation = 0,
-                    mimeTypes = mimeTypes,
-                )
-                database.clipboardFilesDao().insert(info)
-                ClipboardMediaProvider.registerRestored(info)
+                val newId = mappedIds[reference.archiveId] ?: run {
+                    val allocatedId = ClipboardFileStorage.importMediaFromBackup(context, sourceFile)
+                    importedIds.add(allocatedId)
+                    val info = ClipboardFileInfo(
+                        id = allocatedId,
+                        displayName = "Restored clipboard " + segment,
+                        size = sourceFile.length(),
+                        orientation = 0,
+                        mimeTypes = mimeTypes,
+                    )
+                    database.clipboardFilesDao().insert(info)
+                    ClipboardMediaProvider.registerRestored(info)
+                    mappedIds[reference.archiveId] = allocatedId
+                    allocatedId
+                }
                 prepared.add(
                     item.copy(
                         id = 0,
