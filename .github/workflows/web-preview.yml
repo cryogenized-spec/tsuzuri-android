@@ -1,0 +1,30 @@
+name: Tsuzuri browser-preview checks
+
+on:
+  push:
+    branches: [feat/tsuzuri-browser-preview]
+    paths: ['web-preview/**', '.github/workflows/web-preview.yml']
+  pull_request:
+    branches: [feat/tsuzuri-bootstrap]
+    paths: ['web-preview/**', '.github/workflows/web-preview.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-preview:
+    name: Static PWA and keyboard-sandbox checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: JavaScript syntax
+        run: node --check web-preview/app.js && node --check web-preview/sw.js
+      - name: Manifest and UI privacy contract
+        run: python3 web-preview/check.py
