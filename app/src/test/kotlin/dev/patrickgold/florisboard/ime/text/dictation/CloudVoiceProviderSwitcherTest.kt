@@ -125,4 +125,31 @@ class CloudVoiceProviderSwitcherTest : FunSpec({
             snapshot.await() shouldBe ("" to groq)
         }
     }
+
+    test("dialog host pinned before suspension rejects old key save after a host switch") {
+        runBlocking {
+            var active = mistral
+            val expectedKeyHost = active
+            val waiting = CompletableDeferred<Unit>()
+            val resume = CompletableDeferred<Unit>()
+            var saved = false
+            val switcher = CloudVoiceProviderSwitcher(
+                currentEndpoint = { active },
+                durablyEraseKey = { true },
+                clearLegacyKey = {},
+                updateEndpoint = { active = it },
+                updateModel = {},
+            )
+            val delayed = async {
+                waiting.complete(Unit)
+                resume.await()
+                switcher.editKeyForHost(expectedKeyHost) { saved = true; true }
+            }
+            waiting.await()
+            switcher.switchTo(groq, "whisper-large-v3-turbo")
+            resume.complete(Unit)
+            delayed.await() shouldBe false
+            saved shouldBe false
+        }
+    }
 })
