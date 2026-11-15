@@ -138,6 +138,13 @@
             android:configChanges="orientation|screenSize"
             android:theme="@style/CrashDialogTheme"/>
 
+        <!-- Sticker pack manager: launched locally from the keyboard, not exported. -->
+        <activity
+            android:name="dev.patrickgold.florisboard.ime.media.stickers.StickerLibraryActivity"
+            android:exported="false"
+            android:theme="@style/FlorisAppTheme"
+            android:label="Tsuzuri stickers" />
+
         <!-- Copy to Clipboard Activity -->
         <activity
             android:name="dev.patrickgold.florisboard.ime.clipboard.FlorisCopyToClipboardActivity"
