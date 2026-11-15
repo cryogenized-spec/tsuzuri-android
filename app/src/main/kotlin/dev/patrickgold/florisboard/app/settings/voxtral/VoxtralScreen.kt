@@ -161,6 +161,9 @@ fun VoxtralScreen() = FlorisScreen {
         val rewritePromptsJson by prefsRef.voxtral.rewritePrompts.collectAsState()
         val dictionaryState by speechDictionary.state.collectAsState()
         var panel by rememberSaveable { mutableStateOf<AiPanel?>(null) }
+        // The intended key host is fixed when the dialog opens, not read from
+        // reactive endpoint state after an asynchronous preference write.
+        var voiceKeyDialogEndpoint by rememberSaveable { mutableStateOf<String?>(null) }
 
         // Key checks open the Keystore-backed stores and decrypt them, so they run off the main thread. The screen
         // waits for both: every route and status below depends on them. They are saveable so that coming back to
@@ -208,7 +211,10 @@ fun VoxtralScreen() = FlorisScreen {
             DictationSettings(
                 hasCloudKey = cloudKey,
                 cloudEndpointUrl = endpointUrl,
-                onAddCloudKey = { panel = AiPanel.CloudKey },
+                onAddCloudKey = {
+                    voiceKeyDialogEndpoint = endpointUrl
+                    panel = AiPanel.CloudKey
+                },
                 onFixCloudAddress = { panel = AiPanel.CloudProvider },
                 dictionaryRow = {
                     val document = dictionaryState.document
@@ -264,7 +270,10 @@ fun VoxtralScreen() = FlorisScreen {
                     title = stringRes(R.string.settings__ai__key__row),
                     value = keyValue(cloudKey),
                     valueColor = warningIf(!cloudKey && backend == TranscriptionBackend.CLOUD),
-                    onClick = { panel = AiPanel.CloudKey },
+                    onClick = {
+                        voiceKeyDialogEndpoint = endpointUrl
+                        panel = AiPanel.CloudKey
+                    },
                     modifier = Modifier.testTag("ai-cloud-key"),
                 )
                 OwnkeyRow(
@@ -355,6 +364,7 @@ fun VoxtralScreen() = FlorisScreen {
                     text = null,
                     hasKey = cloudKey,
                     onSave = { key ->
+                        val expectedKeyEndpoint = voiceKeyDialogEndpoint ?: endpointUrl
                         val keep = TranscriptionBackend.choiceToKeepOnKeySave(selectedBackend, cloudKey)
                         scope.launch {
                             keyError = null
@@ -365,7 +375,7 @@ fun VoxtralScreen() = FlorisScreen {
                                 return@launch
                             }
                             val change = withContext(Dispatchers.IO) {
-                                val saved = voiceSwitcher.editKeyForHost(endpointUrl) {
+                                val saved = voiceSwitcher.editKeyForHost(expectedKeyEndpoint) {
                                     runCatching { voxtralSecretsStore.setApiKey(key) }.isSuccess
                                 }
                                 AiSettings.apiKeySaved(saved, readKey { voxtralSecretsStore.hasApiKey() })
@@ -380,10 +390,11 @@ fun VoxtralScreen() = FlorisScreen {
                         }
                     },
                     onRemove = {
+                        val expectedKeyEndpoint = voiceKeyDialogEndpoint ?: endpointUrl
                         scope.launch {
                             keyError = null
                             val change = withContext(Dispatchers.IO) {
-                                val cleared = voiceSwitcher.editKeyForHost(endpointUrl) {
+                                val cleared = voiceSwitcher.editKeyForHost(expectedKeyEndpoint) {
                                     runCatching { voxtralSecretsStore.clearApiKeyDurably() }.getOrDefault(false)
                                 }
                                 val hasKeyAfter = readKey { voxtralSecretsStore.hasApiKey() }
