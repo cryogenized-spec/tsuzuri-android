@@ -125,4 +125,32 @@ class CloudVoiceProviderSwitcherTest : FunSpec({
             snapshot.await() shouldBe ("" to groq)
         }
     }
+
+    test("dialog host frozen before suspension rejects stale credentials even if UI target changed") {
+        runBlocking {
+            var active = mistral
+            val oldDialogHost = active
+            val waiting = CompletableDeferred<Unit>()
+            val proceed = CompletableDeferred<Unit>()
+            var saved = false
+            val switcher = CloudVoiceProviderSwitcher(
+                currentEndpoint = { active },
+                durablyEraseKey = { true },
+                clearLegacyKey = {},
+                updateEndpoint = { active = it },
+                updateModel = {},
+            )
+            val delayedSave = async {
+                waiting.complete(Unit)
+                proceed.await() // simulate unrelated settings storage suspension before edit lock
+                switcher.editKeyForHost(oldDialogHost) { saved = true; true }
+            }
+            waiting.await()
+            switcher.switchTo(groq, "whisper-large-v3-turbo")
+            proceed.complete(Unit)
+            delayedSave.await() shouldBe false
+            saved shouldBe false
+            active shouldBe groq
+        }
+    }
 })
