@@ -50,6 +50,7 @@ import dev.patrickgold.florisboard.app.ext.ExtensionListScreen
 import dev.patrickgold.florisboard.app.ext.ExtensionListScreenType
 import dev.patrickgold.florisboard.app.ext.ExtensionViewScreen
 import dev.patrickgold.florisboard.app.settings.HomeScreen
+import dev.patrickgold.florisboard.app.settings.prescreen.PreScreenWorkspaceScreen
 import dev.patrickgold.florisboard.app.settings.about.AboutScreen
 import dev.patrickgold.florisboard.app.settings.about.ProjectLicenseScreen
 import dev.patrickgold.florisboard.app.settings.about.ThirdPartyLicensesScreen
@@ -154,6 +155,10 @@ object Routes {
         @Serializable
         @Deeplink("settings/keyboard/long-press-symbols")
         object SymbolShortcuts
+
+        @Serializable
+        @Deeplink("settings/prescreen")
+        object PreScreen
 
         @Serializable
         @Deeplink("settings/smartbar")
@@ -327,6 +332,7 @@ object Routes {
             composableWithDeepLink(Settings.Keyboard::class) { KeyboardScreen() }
             composableWithDeepLink(Settings.InputFeedback::class) { InputFeedbackScreen() }
             composableWithDeepLink(Settings.SymbolShortcuts::class) { SymbolShortcutScreen() }
+            composableWithDeepLink(Settings.PreScreen::class) { PreScreenWorkspaceScreen() }
 
             // The toolbar settings live on the Keyboard screen now; the route stays for old links.
             composableWithDeepLink(Settings.Smartbar::class) { KeyboardScreen() }
