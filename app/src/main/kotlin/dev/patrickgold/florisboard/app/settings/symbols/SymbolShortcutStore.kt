@@ -47,6 +47,13 @@ internal object SymbolShortcutStore {
 
     fun options(): SymbolPopupOptions = popupOptions
 
+    /** Proposed text is already decoded for preview: never reinterpret U+ text on commit. */
+    fun validatedApprovedSymbols(values: List<String>): List<String>? =
+        values.takeIf { symbols ->
+            symbols.size <= MAX_SHORTCUTS_PER_KEY &&
+                symbols.distinct().size == symbols.size && symbols.all(::isValidSymbol)
+        }
+
     /** Recognises Unicode Latin diacritic variants of the current letter. */
     fun isAccentVariant(key: String, candidate: String): Boolean {
         val base = keyOf(key)?.lowercase(Locale.ROOT) ?: return false
@@ -196,9 +203,8 @@ internal object SymbolShortcutStore {
             val verified = LinkedHashMap<String, List<String>>()
             for ((rawKey, rawSymbols) in changes) {
                 val key = keyOf(rawKey) ?: return@withContext false
-                val symbols = rawSymbols.map { decodeUserInput(it) ?: return@withContext false }
-                if (symbols.size > MAX_SHORTCUTS_PER_KEY ||
-                    symbols.distinct().size != symbols.size || key in verified) return@withContext false
+                val symbols = validatedApprovedSymbols(rawSymbols) ?: return@withContext false
+                if (key in verified) return@withContext false
                 verified[key] = symbols
             }
             storageMutex.withLock {
