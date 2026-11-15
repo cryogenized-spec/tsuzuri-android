@@ -26,6 +26,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideIn
 import androidx.compose.animation.slideOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.unit.IntOffset
@@ -51,6 +53,7 @@ import dev.patrickgold.florisboard.app.ext.ExtensionListScreenType
 import dev.patrickgold.florisboard.app.ext.ExtensionViewScreen
 import dev.patrickgold.florisboard.app.settings.HomeScreen
 import dev.patrickgold.florisboard.app.settings.prescreen.PreScreenWorkspaceScreen
+import dev.patrickgold.florisboard.app.settings.prescreen.PreScreenWorkspaceState
 import dev.patrickgold.florisboard.app.settings.about.AboutScreen
 import dev.patrickgold.florisboard.app.settings.about.ProjectLicenseScreen
 import dev.patrickgold.florisboard.app.settings.about.ThirdPartyLicensesScreen
@@ -332,7 +335,12 @@ object Routes {
             composableWithDeepLink(Settings.Keyboard::class) { KeyboardScreen() }
             composableWithDeepLink(Settings.InputFeedback::class) { InputFeedbackScreen() }
             composableWithDeepLink(Settings.SymbolShortcuts::class) { SymbolShortcutScreen() }
-            composableWithDeepLink(Settings.PreScreen::class) { PreScreenWorkspaceScreen() }
+            composableWithDeepLink(Settings.PreScreen::class) { entry ->
+                val workspace = remember(entry) {
+                    ViewModelProvider(entry)[PreScreenWorkspaceState::class.java]
+                }
+                PreScreenWorkspaceScreen(workspace)
+            }
 
             // The toolbar settings live on the Keyboard screen now; the route stays for old links.
             composableWithDeepLink(Settings.Smartbar::class) { KeyboardScreen() }
