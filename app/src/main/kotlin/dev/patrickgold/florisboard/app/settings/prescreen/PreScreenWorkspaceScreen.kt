@@ -70,7 +70,7 @@ import kotlin.math.roundToInt
  * Only an explicit tap copies APPROVED text to the Android clipboard.
  */
 @Composable
-fun PreScreenWorkspaceScreen() = FlorisScreen {
+fun PreScreenWorkspaceScreen(workspace: PreScreenWorkspaceState) = FlorisScreen {
     title = "Pre-screen workspace"
     previewFieldVisible = false
 
@@ -88,17 +88,19 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
         LaunchedEffect(colorStored) { colourInput = colorStored }
         var countPreview by remember { mutableFloatStateOf(count.toFloat()) }
         LaunchedEffect(countStored) { countPreview = count.toFloat() }
-        var syntax by remember { mutableStateOf(PreScreenSyntax.MARKDOWN) }
-        var draft by remember { mutableStateOf(TextFieldValue("")) }
-        var instruction by remember { mutableStateOf("") }
-        var proposal by remember { mutableStateOf<PreScreenProposal?>(null) }
-        var proposalSource by remember { mutableStateOf<String?>(null) }
-        var selectedCategory by remember { mutableStateOf<PreScreenKind?>(null) }
-        var approvedText by remember { mutableStateOf<String?>(null) }
-        var busy by remember { mutableStateOf(false) }
-        var activeJob by remember { mutableStateOf<Job?>(null) }
-        var requestGeneration by remember { mutableIntStateOf(0) }
-        var feedback by remember { mutableStateOf<String?>(null) }
+        // Navigation-entry ViewModel keeps private draft state in RAM across
+        // rotation and a visit to provider settings, never in saved bundles.
+        var syntax by workspace.syntax
+        var draft by workspace.draft
+        var instruction by workspace.instruction
+        var proposal by workspace.proposal
+        var proposalSource by workspace.proposalSource
+        var selectedCategory by workspace.selectedCategory
+        var approvedText by workspace.approvedText
+        var busy by workspace.busy
+        var activeJob by workspace.activeJob
+        var requestGeneration by workspace.requestGeneration
+        var feedback by workspace.feedback
 
         fun requestEdit(editInstruction: String, category: PreScreenKind? = null) {
             if (busy || editInstruction.isBlank()) return
