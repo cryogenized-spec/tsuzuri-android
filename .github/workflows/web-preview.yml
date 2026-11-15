@@ -28,3 +28,9 @@ jobs:
         run: node --check web-preview/app.js && node --check web-preview/sw.js
       - name: Manifest and UI privacy contract
         run: python3 web-preview/check.py
+      - name: Install Playwright browser for real interaction tests
+        run: |
+          npm install --no-save --package-lock=false playwright
+          npx playwright install --with-deps chromium
+      - name: Browser interaction smoke tests (desktop + mobile)
+        run: node web-preview/tests/smoke.mjs
