@@ -8,7 +8,7 @@
   const state = {
     view: 'keyboard', tool: 'type', theme: 'default', layout: 'qwerty',
     shift: false, symbols: false, numberRow: false, roundKeys: true, oneHanded: false,
-    keyScale: 100, cleanup: 'natural', viewport: 'portrait', stickerPack: 'Favorites',
+    keyScale: 100, cleanup: 'off', viewport: 'portrait', stickerPack: 'Favorites',
     deferredInstall: null, toastTimer: null
   };
   const device = $('#device');
