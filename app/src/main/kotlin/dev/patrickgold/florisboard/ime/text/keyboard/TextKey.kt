@@ -45,6 +45,7 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
     var computedDataOnDown: KeyData = TextKeyData.UNSPECIFIED
 
     fun compute(evaluator: ComputingEvaluator) {
+        val prefs by FlorisPreferenceStore
         val keyboard = evaluator.keyboard as? TextKeyboard ?: return
         val keyboardMode = keyboard.mode
         val computed = data.compute(evaluator)
@@ -134,6 +135,26 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
                             MultiTextKeyData(type = KeyType.CHARACTER, codePoints = points, label = symbol)
                         }
                         computedPopups.relevant.add(keyData)
+                    }
+                }
+                // Preserve inherited accents and custom Unicode choices while
+                // adding familiar editing actions for ordinary text fields.
+                if (keyboardMode == KeyboardMode.CHARACTERS &&
+                    kv == KeyVariation.NORMAL &&
+                    computed.type == KeyType.CHARACTER &&
+                    computed.groupId == KeyData.GROUP_DEFAULT &&
+                    evaluator.editorInfo.isRichInputEditor &&
+                    prefs.keyboard.editingShortcutsEnabled.get()
+                ) {
+                    val action = when (computedLabel) {
+                        "a" -> TextKeyData.CLIPBOARD_SELECT_ALL
+                        "x" -> TextKeyData.CLIPBOARD_CUT
+                        "c" -> TextKeyData.CLIPBOARD_COPY
+                        "v" -> TextKeyData.CLIPBOARD_PASTE
+                        else -> null
+                    }
+                    if (action != null && computedPopups.relevant.none { it.code == action.code }) {
+                        computedPopups.relevant.add(action)
                     }
                 }
                 if (computed.type == KeyType.CHARACTER) {

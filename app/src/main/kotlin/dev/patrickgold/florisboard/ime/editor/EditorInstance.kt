@@ -562,6 +562,11 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         notifyKeyboardEdit()
         autoSpace.setInactive()
         phantomSpace.setInactive()
+        // The host can provide styled HTML/spans, which our plaintext fallback
+        // cannot reconstruct. Only fall back if the host declines the action.
+        if (activeInfo.isRichInputEditor &&
+            currentInputConnection()?.performContextMenuAction(android.R.id.cut) == true
+        ) return true
         val text = activeContent.selectedText.ifBlank { currentInputConnection()?.getSelectedText(0) }
         if (text != null) {
             clipboardManager.addNewPlaintext(text.toString())
@@ -581,6 +586,9 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         notifyKeyboardEdit()
         autoSpace.setInactive()
         phantomSpace.setInactive()
+        if (activeInfo.isRichInputEditor &&
+            currentInputConnection()?.performContextMenuAction(android.R.id.copy) == true
+        ) return true
         val text = activeContent.selectedText.ifBlank { currentInputConnection()?.getSelectedText(0) }
         if (text != null) {
             clipboardManager.addNewPlaintext(text.toString())
@@ -601,6 +609,12 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         notifyKeyboardEdit()
         autoSpace.setInactive()
         phantomSpace.setInactive()
+        // Preserve original clipboard MIME variants by letting the target app
+        // choose among text/plain, text/html and styled text. Internal mode
+        // stays entirely within Tsuzuri's existing clipboard pipeline.
+        if (!prefs.clipboard.useInternalClipboard.get() &&
+            currentInputConnection()?.performContextMenuAction(android.R.id.paste) == true
+        ) return true
         return commitClipboardItem(clipboardManager.primaryClip).also { result ->
             if (!result) {
                 appContext.showShortToastSync("Failed to paste item.")

@@ -641,6 +641,14 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
             key = "keyboard__long_press_delay",
             default = 300,
         )
+        val editingShortcutsEnabled = boolean(
+            key = "keyboard__editing_shortcuts_enabled",
+            default = true,
+        )
+        val spacebarDpadEnabled = boolean(
+            key = "keyboard__spacebar_dpad_enabled",
+            default = false,
+        )
         val spaceBarSwitchesToCharacters = boolean(
             key = "keyboard__space_bar_switches_to_characters",
             default = true,

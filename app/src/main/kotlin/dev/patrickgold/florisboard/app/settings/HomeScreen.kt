@@ -94,6 +94,8 @@ fun HomeScreen() = FlorisScreen {
     val context = LocalContext.current
 
     content {
+        // Avoid outer FlorisScreen receiver shadowing inside option lambdas.
+        val settingsPrefs = prefs
         val isOwnkeyEnabled by InputMethodUtils.observeIsFlorisboardEnabled(foregroundOnly = true)
         val isOwnkeySelected by InputMethodUtils.observeIsFlorisboardSelected(foregroundOnly = true)
         if (!isOwnkeyEnabled) {
@@ -114,7 +116,7 @@ fun HomeScreen() = FlorisScreen {
 
         val subtypeManager by context.subtypeManager()
         val subtypes by subtypeManager.subtypesFlow.collectFlowAsState()
-        val displayLanguageNamesIn by prefs.localization.displayLanguageNamesIn.collectAsState()
+        val displayLanguageNamesIn by settingsPrefs.localization.displayLanguageNamesIn.collectAsState()
         val languages = subtypes
             .map { subtype ->
                 when (displayLanguageNamesIn) {
@@ -126,9 +128,9 @@ fun HomeScreen() = FlorisScreen {
             .joinToString(", ")
             .ifBlank { null }
 
-        val themeMode by prefs.theme.mode.collectAsState()
-        val dayThemeId by prefs.theme.dayThemeId.collectAsState()
-        val nightThemeId by prefs.theme.nightThemeId.collectAsState()
+        val themeMode by settingsPrefs.theme.mode.collectAsState()
+        val dayThemeId by settingsPrefs.theme.dayThemeId.collectAsState()
+        val nightThemeId by settingsPrefs.theme.nightThemeId.collectAsState()
         val appearance = stringRes(
             when (AppearanceSummary.of(themeMode, dayThemeId, nightThemeId)) {
                 AppearanceSummary.GRAPHITE -> R.string.settings__appearance__graphite
@@ -144,8 +146,8 @@ fun HomeScreen() = FlorisScreen {
         // 70+ themes or a language-subtype editor. Each option is already built in.
         val quickTryScope = rememberCoroutineScope()
         val activeSubtype by subtypeManager.activeSubtypeFlow.collectFlowAsState()
-        val splitLayoutMode by prefs.keyboard.splitLayoutMode.collectAsState()
-        val windowConfigs by prefs.keyboard.windowConfig.collectAsState()
+        val splitLayoutMode by settingsPrefs.keyboard.splitLayoutMode.collectAsState()
+        val windowConfigs by settingsPrefs.keyboard.windowConfig.collectAsState()
         val configuration = LocalConfiguration.current
         val oneHand = QuickHandPreset.of(
             windowConfigs, configuration.screenWidthDp, configuration.screenHeightDp,
@@ -174,10 +176,10 @@ fun HomeScreen() = FlorisScreen {
                     } else {
                         quickTryScope.launch {
                             val writes = choice.writes()
-                            writes.mode?.let { prefs.theme.mode.set(it) }
-                            writes.glassPreset?.let { prefs.theme.glassPreset.set(it) }
-                            writes.dayThemeId?.let { prefs.theme.dayThemeId.set(it) }
-                            writes.nightThemeId?.let { prefs.theme.nightThemeId.set(it) }
+                            writes.mode?.let { settingsPrefs.theme.mode.set(it) }
+                            writes.glassPreset?.let { settingsPrefs.theme.glassPreset.set(it) }
+                            writes.dayThemeId?.let { settingsPrefs.theme.dayThemeId.set(it) }
+                            writes.nightThemeId?.let { settingsPrefs.theme.nightThemeId.set(it) }
                         }
                     }
                 },
@@ -227,16 +229,16 @@ fun HomeScreen() = FlorisScreen {
                     quickTryScope.launch {
                         // Split and one-handed are alternative geometry modes.
                         if (chosen != SplitLayoutMode.NEVER && oneHand != QuickHandPreset.FULL) {
-                            prefs.keyboard.windowConfig.set(
+                            settingsPrefs.keyboard.windowConfig.set(
                                 QuickHandPreset.update(
-                                    prefs.keyboard.windowConfig.get(),
+                                    settingsPrefs.keyboard.windowConfig.get(),
                                     configuration.screenWidthDp,
                                     configuration.screenHeightDp,
                                     QuickHandPreset.FULL,
                                 ),
                             )
                         }
-                        prefs.keyboard.splitLayoutMode.set(chosen)
+                        settingsPrefs.keyboard.splitLayoutMode.set(chosen)
                     }
                 },
             )
@@ -254,11 +256,11 @@ fun HomeScreen() = FlorisScreen {
                 onSelect = { choice ->
                     quickTryScope.launch {
                         if (choice != QuickHandPreset.FULL) {
-                            prefs.keyboard.splitLayoutMode.set(SplitLayoutMode.NEVER)
+                            settingsPrefs.keyboard.splitLayoutMode.set(SplitLayoutMode.NEVER)
                         }
-                        prefs.keyboard.windowConfig.set(
+                        settingsPrefs.keyboard.windowConfig.set(
                             QuickHandPreset.update(
-                                prefs.keyboard.windowConfig.get(),
+                                settingsPrefs.keyboard.windowConfig.get(),
                                 configuration.screenWidthDp,
                                 configuration.screenHeightDp,
                                 choice,
