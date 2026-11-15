@@ -146,13 +146,10 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
                     evaluator.editorInfo.isRichInputEditor &&
                     prefs.keyboard.editingShortcutsEnabled.get()
                 ) {
-                    val action = when (computedLabel) {
-                        "a" -> TextKeyData.CLIPBOARD_SELECT_ALL
-                        "x" -> TextKeyData.CLIPBOARD_CUT
-                        "c" -> TextKeyData.CLIPBOARD_COPY
-                        "v" -> TextKeyData.CLIPBOARD_PASTE
-                        else -> null
-                    }
+                    val action = TextEditingShortcuts.dataFor(
+                        computedLabel, kv, evaluator.editorInfo.isRichInputEditor,
+                        prefs.keyboard.editingShortcutsEnabled.get(),
+                    )
                     if (action != null && computedPopups.relevant.none { it.code == action.code }) {
                         computedPopups.relevant.add(action)
                     }
