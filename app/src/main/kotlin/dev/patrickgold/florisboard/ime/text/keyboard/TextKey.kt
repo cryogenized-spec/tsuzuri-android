@@ -18,6 +18,7 @@ package dev.patrickgold.florisboard.ime.text.keyboard
 
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.app.settings.symbols.SymbolShortcutStore
+import dev.patrickgold.florisboard.app.settings.symbols.SymbolPopupArrangement
 import dev.patrickgold.florisboard.ime.keyboard.AbstractKeyData
 import dev.patrickgold.florisboard.ime.keyboard.ComputingEvaluator
 import dev.patrickgold.florisboard.ime.keyboard.Key
@@ -124,17 +125,53 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
                     computed.type == KeyType.CHARACTER &&
                     computed.groupId == KeyData.GROUP_DEFAULT
                 ) {
-                    val existingSymbols = computedPopups.relevant
-                        .map { it.asString(isForDisplay = false) }.toSet()
-                    for (symbol in SymbolShortcutStore.forKey(computedLabel)) {
-                        if (symbol in existingSymbols) continue
-                        val points = symbol.codePoints().toArray()
-                        val keyData: KeyData = if (points.size == 1) {
-                            TextKeyData(type = KeyType.CHARACTER, code = points[0], label = symbol)
-                        } else {
-                            MultiTextKeyData(type = KeyType.CHARACTER, codePoints = points, label = symbol)
+                    if (SymbolShortcutStore.keyOf(computedLabel) != null) {
+                        val options = SymbolShortcutStore.options()
+                        val originalEntries = listOfNotNull(computedPopups.main) + computedPopups.relevant
+                        val customEntries: List<KeyData> = SymbolShortcutStore.forKey(computedLabel).map { symbol ->
+                            val points = symbol.codePoints().toArray()
+                            if (points.size == 1) {
+                                TextKeyData(type = KeyType.CHARACTER, code = points[0], label = symbol)
+                            } else {
+                                MultiTextKeyData(type = KeyType.CHARACTER, codePoints = points, label = symbol)
+                            }
                         }
-                        computedPopups.relevant.add(keyData)
+                        if (options.priority == dev.patrickgold.florisboard.app.settings.symbols.SymbolPopupPriority.ORIGINAL) {
+                            // Never promote inherited 'relevant' accents to 'main' in
+                            // Original mode. That would silently change hint
+                            // priority (e.g. number hints on English E).
+                            if (!options.showAccents) {
+                                computedPopups.main?.let { main ->
+                                    if (SymbolShortcutStore.isAccentVariant(
+                                            computedLabel, main.asString(isForDisplay = false),
+                                        )
+                                    ) computedPopups.main = null
+                                }
+                                computedPopups.relevant.removeAll { item ->
+                                    SymbolShortcutStore.isAccentVariant(
+                                        computedLabel, item.asString(isForDisplay = false),
+                                    )
+                                }
+                            }
+                            val seen = (listOfNotNull(computedPopups.main) + computedPopups.relevant)
+                                .map { it.asString(isForDisplay = false) }.toMutableSet()
+                            for (item in customEntries) {
+                                if (seen.add(item.asString(isForDisplay = false))) {
+                                    computedPopups.relevant.add(item)
+                                }
+                            }
+                        } else {
+                            val arranged = SymbolPopupArrangement.arrange(
+                                key = computedLabel,
+                                inherited = originalEntries,
+                                custom = customEntries,
+                                options = options,
+                                label = { it.asString(isForDisplay = false) },
+                            )
+                            computedPopups.main = arranged.firstOrNull()
+                            computedPopups.relevant.clear()
+                            computedPopups.relevant.addAll(arranged.drop(1))
+                        }
                     }
                 }
                 // Preserve inherited accents and custom Unicode choices while

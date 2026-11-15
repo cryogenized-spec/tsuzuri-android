@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cryogenized-spec/tsuzuri-android/blob/main/docs/schemas/prescreen-response-v1.schema.json",
+  "title": "Tsuzuri Pre-screen AI proposal v1",
+  "description": "Data-only response. The app validates before rendering and never interprets model fields as executable UI.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revised_text",
+    "follow_up",
+    "suggestions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "revised_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 6000
+    },
+    "follow_up": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 240
+    },
+    "suggestions": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label",
+          "instruction",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "instruction": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 350
+          },
+          "kind": {
+            "enum": [
+              "tone",
+              "length",
+              "format",
+              "structure",
+              "emoji",
+              "typography"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

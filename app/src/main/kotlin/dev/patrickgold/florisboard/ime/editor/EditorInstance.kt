@@ -37,6 +37,7 @@ import dev.patrickgold.florisboard.ime.clipboard.provider.ItemType
 import dev.patrickgold.florisboard.ime.input.InputShiftState
 import dev.patrickgold.florisboard.ime.keyboard.IncognitoMode
 import dev.patrickgold.florisboard.ime.keyboard.KeyboardMode
+import dev.patrickgold.florisboard.ime.media.stickers.StickerStore
 import dev.patrickgold.florisboard.ime.nlp.SuggestionCandidate
 import dev.patrickgold.florisboard.ime.text.composing.Appender
 import dev.patrickgold.florisboard.ime.text.composing.Composer
@@ -439,6 +440,52 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      *
      * @return True on success, false if something went wrong.
      */
+    /**
+     * Send one locally stored static sticker as image/png. The receiver must
+     * explicitly advertise support through Android's EditorInfo MIME types.
+     * No text, network call or clipboard fallback is performed implicitly.
+     */
+    fun canUseStickerMedia(): Boolean {
+        val attributes = activeInfo.inputAttributes
+        return activeInputSessionId != 0L &&
+            attributes.type == InputAttributes.Type.TEXT &&
+            attributes.variation !in setOf(
+                InputAttributes.Variation.PASSWORD,
+                InputAttributes.Variation.VISIBLE_PASSWORD,
+                InputAttributes.Variation.WEB_PASSWORD,
+                InputAttributes.Variation.EMAIL_ADDRESS,
+                InputAttributes.Variation.WEB_EMAIL_ADDRESS,
+                InputAttributes.Variation.URI,
+            ) &&
+            activeState.keyVariation == KeyVariation.NORMAL &&
+            !activeInfo.isRawInputEditor
+    }
+
+    fun commitSticker(id: String): Boolean {
+        if (!canUseStickerMedia()) return false
+        val item = StickerStore.find(id) ?: return false
+        val contentUri = try {
+            StickerStore.uriFor(appContext, item)
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        val connection = currentInputConnection() ?: return false
+        return try {
+            val content = InputContentInfoCompat(
+                contentUri,
+                ClipDescription("Tsuzuri sticker", arrayOf("image/png")),
+                null,
+            )
+            connection.finishComposingText()
+            InputConnectionCompat.commitContent(
+                connection, activeInfo.base, content,
+                InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION, null,
+            )
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun commitClipboardItem(item: ClipboardItem?): Boolean {
         notifyKeyboardEdit()
         if (item == null) return false

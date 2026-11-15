@@ -362,6 +362,15 @@ fun HomeScreen() = FlorisScreen {
         }
 
         HomeAiCard(onClick = { navController.navigate(Routes.Settings.Voxtral) })
+        OwnkeyGroup {
+            OwnkeyRow(
+                modifier = Modifier.testTag("home-prescreen-workspace"),
+                title = "Pre-screen editing workspace (experimental)",
+                summary = "Draft locally, format text, review AI changes, then approve or reject.",
+                chevron = true,
+                onClick = { navController.navigate(Routes.Settings.PreScreen) },
+            )
+        }
 
         OwnkeyGroup {
             OwnkeyRow(

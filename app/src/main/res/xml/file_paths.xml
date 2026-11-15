@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
+    <!-- Only locally imported, normalised sticker images are shared by URI. -->
+    <files-path name="stickers" path="stickers/" />
     <cache-path
         name="backup"
         path="backup-and-restore/"/>
