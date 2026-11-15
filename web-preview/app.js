@@ -102,10 +102,18 @@
     $$('[data-jump]').forEach(x=>x.addEventListener('click',()=>setView(x.dataset.jump)));
     $$('[data-viewport]').forEach(x=>x.addEventListener('click',()=>{
       state.viewport=x.dataset.viewport;device.className=device.className.replace(/\b(portrait|compact|landscape)\b/g,'').trim()+' '+state.viewport;
-      $$('[data-viewport]').forEach(v=>v.classList.toggle('selected',v===x));renderKeyboard();
+      $('[data-viewport]').forEach(v=>v.classList.toggle('selected',v===x));fitLandscapeDevice();renderKeyboard();
     }));
     document.addEventListener('click',e=>{const t=e.target.closest('[data-theme]');if(t)applyTheme(t.dataset.theme);});
-    $$('.tool').forEach(x=>x.addEventListener('click',()=>setTool(x.dataset.tool)));
+    $('.tool').forEach(x=>x.addEventListener('click',()=>setTool(x.dataset.tool)));
+    $('#toggleNativeKeyboard').addEventListener('click',()=>{
+      const enabled=draft.getAttribute('inputmode')==='text';
+      draft.setAttribute('inputmode',enabled?'none':'text');
+      $('#toggleNativeKeyboard').setAttribute('aria-pressed',String(!enabled));
+      toast(enabled?'Phone soft keyboard disabled.':'Phone soft keyboard enabled explicitly.');
+      if(!enabled)draft.focus();
+    });
+    window.addEventListener('resize',fitLandscapeDevice);
     const bind=(sel,fn)=>{$(sel).addEventListener('change',fn);};
     bind('#numberRow',e=>{state.numberRow=e.target.checked;renderKeyboard();});
     bind('#roundKeys',e=>{state.roundKeys=e.target.checked;renderKeyboard();});
@@ -121,7 +129,15 @@
     $('#installBtn').addEventListener('click',async()=>{if(!state.deferredInstall)return;state.deferredInstall.prompt();await state.deferredInstall.userChoice;state.deferredInstall=null;$('#installBtn').hidden=true;});
     window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.deferredInstall=e;$('#installBtn').hidden=false;});
     if('serviceWorker' in navigator && location.protocol==='https:')window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
-    applyTheme('default');renderKeyboard();
+    applyTheme('default');fitLandscapeDevice();renderKeyboard();
+  }
+  function fitLandscapeDevice(){
+    if(state.viewport==='landscape'){
+      const available=$('.stage').clientWidth-20;
+      device.style.zoom=String(Math.min(1,Math.max(.25,available/740)));
+    }else{
+      device.style.zoom='';
+    }
   }
   function setTool(tool){state.tool=tool;$$('.tool').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));renderKeyboard();}
   function insert(text){
@@ -137,20 +153,12 @@
     draft.focus();draft.dispatchEvent(new Event('input',{bubbles:true}));
   }
   function sendMessage(){const text=draft.value.trim();if(!text){toast('Type a sample message first.');return;}const el=document.createElement('div');el.className='bubble outgoing';el.textContent=text;$('#messages').append(el);$('#messages').scrollTop=$('#messages').scrollHeight;draft.value='';draft.dispatchEvent(new Event('input',{bubbles:true}));toast('Sent in the mock conversation only.');}
-  async function clipboardCommand(action){
-    try{
-      if(action==='a'){draft.focus();draft.select();toast('Selected all in the mock composer.');}
-      else if(action==='c'){await navigator.clipboard.writeText(draft.value.slice(draft.selectionStart,draft.selectionEnd)||draft.value);toast('Copied selected draft text.');}
-      else if(action==='x'){const a=draft.selectionStart,b=draft.selectionEnd;await navigator.clipboard.writeText(draft.value.slice(a,b)||draft.value);if(a===b)draft.value='';else draft.setRangeText('',a,b,'end');draft.dispatchEvent(new Event('input',{bubbles:true}));toast('Cut selected draft text.');}
-      else if(action==='v'){const text=await navigator.clipboard.readText();insert(text);toast('Pasted clipboard text.');}
-    }catch{toast('Clipboard access needs browser permission.');}
-  }
   function makeKey(label, code, special=false,wide=false){
     const b=document.createElement('button');b.type='button';b.className='key'+(special?' key-special':'')+(wide?' key-wide':'')+(code==='space'?' key-space':'')+(code==='enter'?' key-enter':'');b.textContent=label;b.setAttribute('aria-label',label);b.dataset.key=code;
     const hint=accentChars[code.toLowerCase()]||(code==='a'?'Ctrl+A':code==='c'?'Ctrl+C':code==='v'?'Ctrl+V':code==='x'?'Ctrl+X':'');
     if(hint&&code.length===1){const h=document.createElement('span');h.className='hint';h.textContent=hint;b.append(h);}
     let timer=null,longPressed=false;
-    b.addEventListener('pointerdown',()=>{longPressed=false;if(code.length===1&&/[a-z]/i.test(code))timer=setTimeout(()=>{longPressed=true;if(['a','c','x','v'].includes(code.toLowerCase()))clipboardCommand(code.toLowerCase());else insert(accentChars[code]||code);},540);});
+    b.addEventListener('pointerdown',()=>{longPressed=false;if(code.length===1&&/[a-z]/i.test(code))timer=setTimeout(()=>{longPressed=true;insert(accentChars[code]||code);},540);});
     ['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,()=>{clearTimeout(timer);}));
     b.addEventListener('click',()=>{if(longPressed){longPressed=false;return;}handleKey(code);});return b;
   }
@@ -219,7 +227,9 @@
     board.innerHTML='<div class="tool-pane"><div class="tool-pane-head"><strong>Pre-screen editing</strong><small>Local draft, no AI</small></div><textarea class="prescreen-editor" id="prescreenSource" aria-label="Pre-screen draft"></textarea><div class="prescreen-ops"><button data-format="bold">Bold</button><button data-format="italic">Italic</button><button data-format="strike">Strike</button><button data-format="heading">Heading</button><button data-format="cleanup">Clean text</button><button class="apply" id="approveDraft">Approve → composer</button></div><div class="tool-feedback">Formatting is a local text demonstration. Native Pre-screen AI proposals, approvals and transfer require Android testing.</div></div>';
     const editor=$('#prescreenSource');editor.value=source;
     $$('[data-format]',board).forEach(b=>b.addEventListener('click',()=>{
-      const start=editor.selectionStart,end=editor.selectionEnd;const selected=editor.value.slice(start,end)||(editor.value.slice(0,70));let output=selected;
+      const a=editor.selectionStart,b=editor.selectionEnd;
+      const start=a===b?0:a,end=a===b?editor.value.length:b;
+      const selected=editor.value.slice(start,end);let output=selected;
       if(b.dataset.format==='bold')output='**'+selected+'**';
       if(b.dataset.format==='italic')output='*'+selected+'*';
       if(b.dataset.format==='strike')output='~~'+selected+'~~';
