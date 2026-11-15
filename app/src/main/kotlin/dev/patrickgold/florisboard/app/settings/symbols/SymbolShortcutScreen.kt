@@ -16,7 +16,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +37,7 @@ import dev.patrickgold.florisboard.app.ui.OwnkeyGroup
 import dev.patrickgold.florisboard.app.ui.OwnkeyRow
 import dev.patrickgold.florisboard.lib.compose.FlorisScreen
 import dev.patrickgold.jetpref.datastore.model.collectAsState as collectPrefsAsState
+import kotlinx.coroutines.launch
 
 /**
  * Per-letter Unicode editor for everyday users. No JSON or developer syntax
@@ -50,7 +53,8 @@ fun SymbolShortcutScreen() = FlorisScreen {
     val uriHandler = LocalUriHandler.current
 
     content {
-        remember(context) { SymbolShortcutStore.ensureLoaded(context); true }
+        val shortcutScope = rememberCoroutineScope()
+        LaunchedEffect(context) { SymbolShortcutStore.ensureLoaded(context) }
         val revision by SymbolShortcutStore.revision.collectAsState()
         var selectedKey by rememberSaveable { mutableStateOf("E") }
         var selectedCategory by remember { mutableStateOf(SymbolCategory.ACCENTS) }
@@ -113,8 +117,14 @@ fun SymbolShortcutScreen() = FlorisScreen {
                     for (value in assigned) {
                         OutlinedButton(
                             onClick = {
-                                SymbolShortcutStore.remove(context, selectedKey, value)
-                                message = ""
+                                val key = selectedKey
+                                shortcutScope.launch {
+                                    message = if (SymbolShortcutStore.remove(context, key, value)) {
+                                        "Removed $value from $key."
+                                    } else {
+                                        "This symbol is no longer assigned."
+                                    }
+                                }
                             },
                             modifier = Modifier.weight(1f).testTag("unicode-remove-$value"),
                         ) { Text(value) }
@@ -135,10 +145,13 @@ fun SymbolShortcutScreen() = FlorisScreen {
                     for (symbol in rowSymbols) {
                         OutlinedButton(
                             onClick = {
-                                message = if (SymbolShortcutStore.add(context, selectedKey, symbol)) {
-                                    "Added $symbol to $selectedKey."
-                                } else {
-                                    "Already present, or the key has four custom alternatives."
+                                val key = selectedKey
+                                shortcutScope.launch {
+                                    message = if (SymbolShortcutStore.add(context, key, symbol)) {
+                                        "Added $symbol to $key."
+                                    } else {
+                                        "Already present, or the key has four custom alternatives."
+                                    }
                                 }
                             },
                             modifier = Modifier.weight(1f).height(48.dp),
@@ -164,11 +177,15 @@ fun SymbolShortcutScreen() = FlorisScreen {
             Button(
                 modifier = Modifier.padding(horizontal = 16.dp).testTag("unicode-save"),
                 onClick = {
-                    message = if (SymbolShortcutStore.add(context, selectedKey, customInput)) {
-                        customInput = ""
-                        "Saved to $selectedKey."
-                    } else {
-                        "Not saved. Use a symbol or U+ hexadecimal value (up to four per key)."
+                    val key = selectedKey
+                    val input = customInput
+                    shortcutScope.launch {
+                        message = if (SymbolShortcutStore.add(context, key, input)) {
+                            customInput = ""
+                            "Saved to $key."
+                        } else {
+                            "Not saved. Use a symbol or U+ hexadecimal value (up to four per key)."
+                        }
                     }
                 },
             ) { Text("Add symbol") }

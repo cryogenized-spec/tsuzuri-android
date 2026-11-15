@@ -6,7 +6,11 @@ package dev.patrickgold.florisboard.app.settings.symbols
 
 import android.content.Context
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * User-editable long-press Unicode alternatives for A..Z. These are ordinary
@@ -23,6 +27,7 @@ internal object SymbolShortcutStore {
 
     @Volatile private var cached: Map<String, List<String>> = emptyMap()
     @Volatile private var loaded = false
+    private val storageMutex = Mutex()
 
     fun keyOf(text: String): String? {
         val value = text.trim().uppercase(Locale.ROOT)
@@ -53,20 +58,28 @@ internal object SymbolShortcutStore {
         return result.takeIf(::isValidSymbol)
     }
 
-    @Synchronized
-    fun ensureLoaded(context: Context) {
+    /**
+     * All SharedPreferences reads and commits run under the same coroutine
+     * mutex on Dispatchers.IO. The key computation path only reads cached.
+     */
+    private fun loadLocked(context: Context) {
         if (loaded) return
-        val store = context.applicationContext.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
-        val result = mutableMapOf<String, List<String>>()
-        for ((rawKey, anyValue) in store.all) {
+        val preferences = context.applicationContext.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+        val values = mutableMapOf<String, List<String>>()
+        for ((rawKey, anyValue) in preferences.all) {
             val key = keyOf(rawKey) ?: continue
             val value = anyValue as? String ?: continue
-            val items = value.split(DELIMITER)
+            val symbols = value.split(DELIMITER)
                 .filter(::isValidSymbol).distinct().take(MAX_SHORTCUTS_PER_KEY)
-            if (items.isNotEmpty()) result[key] = items
+            if (symbols.isNotEmpty()) values[key] = symbols
         }
-        cached = result.toMap()
+        cached = values.toMap()
         loaded = true
+        revision.value += 1
+    }
+
+    suspend fun ensureLoaded(context: Context) = withContext(Dispatchers.IO) {
+        storageMutex.withLock { loadLocked(context) }
     }
 
     fun forKey(label: String): List<String> {
@@ -74,32 +87,37 @@ internal object SymbolShortcutStore {
         return cached[key].orEmpty()
     }
 
-    @Synchronized
-    fun add(context: Context, rawKey: String, rawSymbol: String): Boolean {
-        ensureLoaded(context)
-        val key = keyOf(rawKey) ?: return false
-        val symbol = decodeUserInput(rawSymbol) ?: return false
-        val old = cached[key].orEmpty()
-        if (symbol in old || old.size >= MAX_SHORTCUTS_PER_KEY) return false
-        return write(context, key, old + symbol)
-    }
+    suspend fun add(context: Context, rawKey: String, rawSymbol: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val key = keyOf(rawKey) ?: return@withContext false
+            val symbol = decodeUserInput(rawSymbol) ?: return@withContext false
+            storageMutex.withLock {
+                loadLocked(context)
+                val current = cached[key].orEmpty()
+                if (symbol in current || current.size >= MAX_SHORTCUTS_PER_KEY) {
+                    false
+                } else {
+                    writeLocked(context, key, current + symbol)
+                }
+            }
+        }
 
-    @Synchronized
-    fun remove(context: Context, rawKey: String, symbol: String): Boolean {
-        ensureLoaded(context)
-        val key = keyOf(rawKey) ?: return false
-        val old = cached[key].orEmpty()
-        if (symbol !in old) return false
-        return write(context, key, old - symbol)
-    }
+    suspend fun remove(context: Context, rawKey: String, symbol: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val key = keyOf(rawKey) ?: return@withContext false
+            storageMutex.withLock {
+                loadLocked(context)
+                val current = cached[key].orEmpty()
+                if (symbol !in current) false else writeLocked(context, key, current - symbol)
+            }
+        }
 
-    private fun write(context: Context, key: String, symbols: List<String>): Boolean {
-        val store = context.applicationContext.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
-        val editor = store.edit()
+    /** Requires storageMutex on Dispatchers.IO; publish only after commit. */
+    private fun writeLocked(context: Context, key: String, symbols: List<String>): Boolean {
+        val preferences = context.applicationContext.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+        val editor = preferences.edit()
         if (symbols.isEmpty()) editor.remove(key)
         else editor.putString(key, symbols.joinToString(DELIMITER))
-        // Keep the old snapshot if the write fails. The editor UI must not
-        // announce a saved shortcut that could not be persisted.
         if (!editor.commit()) return false
         cached = cached.toMutableMap().apply {
             if (symbols.isEmpty()) remove(key) else put(key, symbols.toList())

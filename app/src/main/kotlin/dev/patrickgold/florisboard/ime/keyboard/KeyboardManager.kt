@@ -155,7 +155,9 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     ).also { it.keyEventReceiver = this }
 
     init {
-        SymbolShortcutStore.ensureLoaded(appContext)
+        // Never block keyboard startup on SharedPreferences disk I/O.
+        // The revision flow refreshes popups after the initial snapshot loads.
+        scope.launch(Dispatchers.IO) { SymbolShortcutStore.ensureLoaded(appContext) }
         scope.launch(Dispatchers.Main.immediate) {
             // A saved key assignment becomes active immediately; no IME
             // restart, JSON import or keyboard-cache purge is required.
