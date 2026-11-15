@@ -126,8 +126,9 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
                     computed.groupId == KeyData.GROUP_DEFAULT
                 ) {
                     if (SymbolShortcutStore.keyOf(computedLabel) != null) {
+                        val options = SymbolShortcutStore.options()
                         val originalEntries = listOfNotNull(computedPopups.main) + computedPopups.relevant
-                        val customEntries = SymbolShortcutStore.forKey(computedLabel).map { symbol ->
+                        val customEntries: List<KeyData> = SymbolShortcutStore.forKey(computedLabel).map { symbol ->
                             val points = symbol.codePoints().toArray()
                             if (points.size == 1) {
                                 TextKeyData(type = KeyType.CHARACTER, code = points[0], label = symbol)
@@ -135,16 +136,42 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
                                 MultiTextKeyData(type = KeyType.CHARACTER, codePoints = points, label = symbol)
                             }
                         }
-                        val arranged = SymbolPopupArrangement.arrange(
-                            key = computedLabel,
-                            inherited = originalEntries,
-                            custom = customEntries,
-                            options = SymbolShortcutStore.options(),
-                            label = { it.asString(isForDisplay = false) },
-                        )
-                        computedPopups.main = arranged.firstOrNull()
-                        computedPopups.relevant.clear()
-                        computedPopups.relevant.addAll(arranged.drop(1))
+                        if (options.priority == dev.patrickgold.florisboard.app.settings.symbols.SymbolPopupPriority.ORIGINAL) {
+                            // Never promote inherited 'relevant' accents to 'main' in
+                            // Original mode. That would silently change hint
+                            // priority (e.g. number hints on English E).
+                            if (!options.showAccents) {
+                                computedPopups.main?.let { main ->
+                                    if (SymbolShortcutStore.isAccentVariant(
+                                            computedLabel, main.asString(isForDisplay = false),
+                                        )
+                                    ) computedPopups.main = null
+                                }
+                                computedPopups.relevant.removeAll { item ->
+                                    SymbolShortcutStore.isAccentVariant(
+                                        computedLabel, item.asString(isForDisplay = false),
+                                    )
+                                }
+                            }
+                            val seen = (listOfNotNull(computedPopups.main) + computedPopups.relevant)
+                                .map { it.asString(isForDisplay = false) }.toMutableSet()
+                            for (item in customEntries) {
+                                if (seen.add(item.asString(isForDisplay = false))) {
+                                    computedPopups.relevant.add(item)
+                                }
+                            }
+                        } else {
+                            val arranged = SymbolPopupArrangement.arrange(
+                                key = computedLabel,
+                                inherited = originalEntries,
+                                custom = customEntries,
+                                options = options,
+                                label = { it.asString(isForDisplay = false) },
+                            )
+                            computedPopups.main = arranged.firstOrNull()
+                            computedPopups.relevant.clear()
+                            computedPopups.relevant.addAll(arranged.drop(1))
+                        }
                     }
                 }
                 // Preserve inherited accents and custom Unicode choices while
