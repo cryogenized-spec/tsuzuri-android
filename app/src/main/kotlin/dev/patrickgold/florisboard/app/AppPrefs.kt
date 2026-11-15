@@ -95,6 +95,7 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         val learningEnabled = boolean(key = "prescreen__learning_enabled", default = false)
         val learnedKinds = string(key = "prescreen__learned_kinds", default = "{}")
         val diffColor = string(key = "prescreen__diff_color", default = "43A047")
+        val manualSpellingEnabled = boolean(key = "prescreen__manual_spelling_enabled", default = true)
     }
 
     val clipboard = Clipboard()
