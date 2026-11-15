@@ -565,6 +565,7 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         // The host can provide styled HTML/spans, which our plaintext fallback
         // cannot reconstruct. Only fall back if the host declines the action.
         if (activeInfo.isRichInputEditor &&
+            !prefs.clipboard.useInternalClipboard.get() &&
             currentInputConnection()?.performContextMenuAction(android.R.id.cut) == true
         ) return true
         val text = activeContent.selectedText.ifBlank { currentInputConnection()?.getSelectedText(0) }
@@ -587,6 +588,7 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         autoSpace.setInactive()
         phantomSpace.setInactive()
         if (activeInfo.isRichInputEditor &&
+            !prefs.clipboard.useInternalClipboard.get() &&
             currentInputConnection()?.performContextMenuAction(android.R.id.copy) == true
         ) return true
         val text = activeContent.selectedText.ifBlank { currentInputConnection()?.getSelectedText(0) }
