@@ -99,6 +99,7 @@ try{
   assert.equal(await mobile.locator("#draft").getAttribute("inputmode"),"none");
   await mobile.locator('[data-key="a"]').click();
   assert.equal(await mobile.locator("#draft").inputValue(),"a");
+  await mobile.screenshot({path:"/tmp/tsuzuri-browser-mobile-portrait.png",fullPage:true});
   await mobile.locator('[data-viewport="landscape"]').click();
   assert.ok(await mobile.locator("#device").evaluate(el=>Number.parseFloat(getComputedStyle(el).zoom||"1")<0.9),"landscape should scale down on narrow phone");
   const view=await mobile.locator("#device").boundingBox();
@@ -109,5 +110,5 @@ try{
   assert.deepEqual(errors,[],"console/runtime errors");
   console.log("PASS Tsuzuri desktop and mobile browser smoke: key input, backspace, mock send, styles, stickers, symbols, Pre-screen, settings, voice demo, manifest, scaled landscape.");
   await page.screenshot({path:"/tmp/tsuzuri-browser-desktop.png",fullPage:true});
-  await mobile.screenshot({path:"/tmp/tsuzuri-browser-mobile.png",fullPage:true});
+  await mobile.screenshot({path:"/tmp/tsuzuri-browser-mobile-landscape.png",fullPage:true});
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
