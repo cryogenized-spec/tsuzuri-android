@@ -34,3 +34,13 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Browser interaction smoke tests (desktop + mobile)
         run: node web-preview/tests/smoke.mjs
+      - name: Attach desktop and mobile inspection screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsuzuri-browser-preview-screenshots
+          path: |
+            /tmp/tsuzuri-browser-desktop.png
+            /tmp/tsuzuri-browser-mobile.png
+          if-no-files-found: ignore
+          retention-days: 14
