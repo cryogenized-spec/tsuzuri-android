@@ -227,8 +227,9 @@
     board.innerHTML='<div class="tool-pane"><div class="tool-pane-head"><strong>Pre-screen editing</strong><small>Local draft, no AI</small></div><textarea class="prescreen-editor" id="prescreenSource" aria-label="Pre-screen draft"></textarea><div class="prescreen-ops"><button data-format="bold">Bold</button><button data-format="italic">Italic</button><button data-format="strike">Strike</button><button data-format="heading">Heading</button><button data-format="cleanup">Clean text</button><button class="apply" id="approveDraft">Approve → composer</button></div><div class="tool-feedback">Formatting is a local text demonstration. Native Pre-screen AI proposals, approvals and transfer require Android testing.</div></div>';
     const editor=$('#prescreenSource');editor.value=source;
     $$('[data-format]',board).forEach(b=>b.addEventListener('click',()=>{
-      const a=editor.selectionStart,b=editor.selectionEnd;
-      const start=a===b?0:a,end=a===b?editor.value.length:b;
+      const startSelection=editor.selectionStart,endSelection=editor.selectionEnd;
+      const start=startSelection===endSelection?0:startSelection;
+      const end=startSelection===endSelection?editor.value.length:endSelection;
       const selected=editor.value.slice(start,end);let output=selected;
       if(b.dataset.format==='bold')output='**'+selected+'**';
       if(b.dataset.format==='italic')output='*'+selected+'*';
