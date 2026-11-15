@@ -263,6 +263,13 @@ fun HomeScreen() = FlorisScreen {
                     ),
                 )
             }
+            OwnkeyRow(
+                modifier = Modifier.testTag("quick-try-custom-symbols"),
+                title = "Custom long-press symbols",
+                summary = "Tap Q, E or any letter and choose your own accents, signs or emoji.",
+                chevron = true,
+                onClick = { navController.navigate(Routes.Settings.SymbolShortcuts) },
+            )
         }
 
         HomeAiCard(onClick = { navController.navigate(Routes.Settings.Voxtral) })

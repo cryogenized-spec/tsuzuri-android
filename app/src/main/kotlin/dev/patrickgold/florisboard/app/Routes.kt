@@ -73,6 +73,7 @@ import dev.patrickgold.florisboard.app.settings.privacy.PrivacyScreen
 import dev.patrickgold.florisboard.app.settings.theme.ThemeManagerScreen
 import dev.patrickgold.florisboard.app.settings.theme.ThemeManagerScreenAction
 import dev.patrickgold.florisboard.app.settings.theme.ThemeScreen
+import dev.patrickgold.florisboard.app.settings.symbols.SymbolShortcutScreen
 import dev.patrickgold.florisboard.app.settings.typing.TypingScreen
 import dev.patrickgold.florisboard.app.settings.voxtral.RewriteStylesScreen
 import dev.patrickgold.florisboard.app.settings.voxtral.SpeechDictionaryScreen
@@ -149,6 +150,10 @@ object Routes {
         @Serializable
         @Deeplink("settings/keyboard/input-feedback")
         object InputFeedback
+
+        @Serializable
+        @Deeplink("settings/keyboard/long-press-symbols")
+        object SymbolShortcuts
 
         @Serializable
         @Deeplink("settings/smartbar")
@@ -321,6 +326,7 @@ object Routes {
 
             composableWithDeepLink(Settings.Keyboard::class) { KeyboardScreen() }
             composableWithDeepLink(Settings.InputFeedback::class) { InputFeedbackScreen() }
+            composableWithDeepLink(Settings.SymbolShortcuts::class) { SymbolShortcutScreen() }
 
             // The toolbar settings live on the Keyboard screen now; the route stays for old links.
             composableWithDeepLink(Settings.Smartbar::class) { KeyboardScreen() }
