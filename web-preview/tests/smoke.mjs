@@ -72,8 +72,10 @@ try{
   assert.equal(await page.locator("#draft").inputValue(),"**hello**");
 
   await page.locator('.side-tab[data-view="appearance"]').click();
-  await page.locator("#numberRow").check();
-  await page.locator("#roundKeys").uncheck();
+  await page.locator("#numberRow").locator("..").click();
+  assert.equal(await page.locator("#numberRow").isChecked(),true);
+  await page.locator("#roundKeys").locator("..").click();
+  assert.equal(await page.locator("#roundKeys").isChecked(),false);
   await page.locator("#layoutChoice").selectOption("azerty");
   await page.locator('.side-tab[data-view="keyboard"]').click();
   assert.equal(await page.locator('[data-key="a"]').count(),1);
