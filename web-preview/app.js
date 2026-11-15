@@ -155,7 +155,7 @@
   function sendMessage(){const text=draft.value.trim();if(!text){toast('Type a sample message first.');return;}const el=document.createElement('div');el.className='bubble outgoing';el.textContent=text;$('#messages').append(el);$('#messages').scrollTop=$('#messages').scrollHeight;draft.value='';draft.dispatchEvent(new Event('input',{bubbles:true}));toast('Sent in the mock conversation only.');}
   function makeKey(label, code, special=false,wide=false){
     const b=document.createElement('button');b.type='button';b.className='key'+(special?' key-special':'')+(wide?' key-wide':'')+(code==='space'?' key-space':'')+(code==='enter'?' key-enter':'');b.textContent=label;b.setAttribute('aria-label',label);b.dataset.key=code;
-    const hint=accentChars[code.toLowerCase()]||(code==='a'?'Ctrl+A':code==='c'?'Ctrl+C':code==='v'?'Ctrl+V':code==='x'?'Ctrl+X':'');
+    const hint=accentChars[code.toLowerCase()]||''; // No clipboard hints: browser simulator never touches the system clipboard.
     if(hint&&code.length===1){const h=document.createElement('span');h.className='hint';h.textContent=hint;b.append(h);}
     let timer=null,longPressed=false;
     b.addEventListener('pointerdown',()=>{longPressed=false;if(code.length===1&&/[a-z]/i.test(code))timer=setTimeout(()=>{longPressed=true;insert(accentChars[code]||code);},540);});
