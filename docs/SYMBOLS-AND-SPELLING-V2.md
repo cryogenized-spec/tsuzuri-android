@@ -73,9 +73,9 @@ candidate replacements to compatible host text editors. The new Pre-screen
 workspace additionally performs a **local, debounced** scan of up to 48
 completed words from the current draft using the inherited `NlpManager`.
 It does not invoke AI. The text field highlights identified typos in
-**red with an underline**. This is a *straight underline in the current
-Compose prototype*, not yet the requested zigzag. A zigzag drawing
-implementation still requires a visual-layout and accessibility pass.
+**red zigzag underlines** using a custom Compose glyph-layout drawing
+component, including multiline wrapping. Its exact appearance, scrolling
+alignment and accessibility still require phone/emulator verification.
 
 Place the cursor in a highlighted word to expose up to five corrections.
 Selecting a replacement changes only the verified original span, and
@@ -104,6 +104,6 @@ and source snapshot guard, focus tests and IME overlay testing.
       validate tap targets on phones and landscape.
 - [ ] BYOK provider tests: malformed responses, errors, stale proposals,
       offline mode and no unintended uploads.
-- [ ] Pre-screen typography: red zigzag rather than only straight underline.
+- [x] Pre-screen red zigzag drawing component added; Android device validation pending.
 - [ ] Keyboard-owned manual correction menu for unsupported host editors.
 - [ ] Merge dependency branches in order; no premature main release.
