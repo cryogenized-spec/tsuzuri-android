@@ -9,6 +9,7 @@ import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.withLock
 
 class CloudVoiceProviderSwitcherTest : FunSpec({
     val mistral = "https://api.mistral.ai/v1/audio/transcriptions"
@@ -94,5 +95,34 @@ class CloudVoiceProviderSwitcherTest : FunSpec({
         edited shouldBe false
         switcher.editKeyForHost(groq) { edited = true; true } shouldBe true
         edited shouldBe true
+    }
+
+    test("session cannot pair an old provider key with the new host during switching") {
+        runBlocking {
+            var active = mistral
+            var key = "mistral-secret"
+            val started = CompletableDeferred<Unit>()
+            val finishErase = CompletableDeferred<Unit>()
+            val switcher = CloudVoiceProviderSwitcher(
+                currentEndpoint = { active },
+                durablyEraseKey = {
+                    started.complete(Unit)
+                    finishErase.await()
+                    key = ""
+                    true
+                },
+                clearLegacyKey = {},
+                updateEndpoint = { active = it },
+                updateModel = {},
+            )
+            val switching = async { switcher.switchTo(groq, "whisper-large-v3-turbo") }
+            started.await()
+            val snapshot = async {
+                CloudVoiceProviderGuard.mutex.withLock { key to active }
+            }
+            finishErase.complete(Unit)
+            switching.await() shouldBe CloudVoiceProviderSwitcher.SwitchResult.Applied(true)
+            snapshot.await() shouldBe ("" to groq)
+        }
     }
 })
