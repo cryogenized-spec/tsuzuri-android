@@ -193,6 +193,15 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
                 minLines = 5,
                 maxLines = 12,
             )
+            OutlinedButton(
+                onClick = {
+                    (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                        .setPrimaryClip(ClipData.newPlainText("Tsuzuri draft", draft.text))
+                    feedback = "Local draft copied. Paste it into the destination app."
+                },
+                enabled = draft.text.isNotBlank(),
+                modifier = Modifier.testTag("prescreen-copy-draft"),
+            ) { Text("Copy current draft") }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = { syntax = PreScreenSyntax.MARKDOWN },
@@ -349,7 +358,7 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
             if (approvedText == draft.text && approvedText != null) {
                 Button(
                     onClick = {
-                        val clip = ClipData.newPlainText("Tsuzuri approved draft", approvedText)
+                        val clip = ClipData.newPlainText("Tsuzuri approved draft", approvedText.orEmpty())
                         (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                             .setPrimaryClip(clip)
                         feedback = "Approved text copied. Paste it into your destination app."
@@ -378,7 +387,7 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
             OutlinedTextField(
                 value = colourInput,
                 onValueChange = { entered ->
-                    val normalized = entered.removePrefix("#").filter { it.isDigit() || it.uppercaseChar() in 'A'..'F' }
+                    val normalized = entered.removePrefix("#").filter { it in '0'..'9' || it.uppercaseChar() in 'A'..'F' }
                         .take(6).uppercase()
                     colourInput = normalized
                     if (normalized.length == 6) {
