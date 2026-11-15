@@ -74,6 +74,20 @@ class PreScreenContractTest : FunSpec({
         )?.text.orEmpty()
         result.contains("````") shouldBe true
     }
+    test("block formatting uses whole line boundaries instead of injecting inline markers") {
+        PreScreenFormatting.apply(
+            "hello world", 7, 7, PreScreenFormat.HEADING, PreScreenSyntax.MARKDOWN
+        )?.text shouldBe "# hello world"
+        PreScreenFormatting.apply(
+            "hello world", 7, 7, PreScreenFormat.QUOTE, PreScreenSyntax.MARKDOWN
+        )?.text shouldBe "> hello world"
+        PreScreenFormatting.apply(
+            "hello world", 7, 7, PreScreenFormat.HEADING, PreScreenSyntax.WHATSAPP
+        )?.text shouldBe "*hello world*"
+        PreScreenFormatting.apply(
+            "first line\\nsecond line", 3, 3, PreScreenFormat.HEADING, PreScreenSyntax.MARKDOWN
+        )?.text shouldBe "# first line\\nsecond line"
+    }
     test("invalid or empty selections never alter the draft") {
         PreScreenFormatting.apply(
             "hello", -1, 2, PreScreenFormat.BOLD, PreScreenSyntax.MARKDOWN
