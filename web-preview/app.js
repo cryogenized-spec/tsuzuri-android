@@ -102,7 +102,7 @@
     $$('[data-jump]').forEach(x=>x.addEventListener('click',()=>setView(x.dataset.jump)));
     $$('[data-viewport]').forEach(x=>x.addEventListener('click',()=>{
       state.viewport=x.dataset.viewport;device.className=device.className.replace(/\b(portrait|compact|landscape)\b/g,'').trim()+' '+state.viewport;
-      $('[data-viewport]').forEach(v=>v.classList.toggle('selected',v===x));fitLandscapeDevice();renderKeyboard();
+      $$('[data-viewport]').forEach(v=>v.classList.toggle('selected',v===x));fitLandscapeDevice();renderKeyboard();
     }));
     document.addEventListener('click',e=>{const t=e.target.closest('[data-theme]');if(t)applyTheme(t.dataset.theme);});
     $('.tool').forEach(x=>x.addEventListener('click',()=>setTool(x.dataset.tool)));
