@@ -161,6 +161,50 @@ class TsuzuriClipboardSecurityTest {
     }
 
     @Test
+    fun removingDuplicateMediaRowKeepsFileReferencedByPinnedHistory() = runBlocking {
+        val sourceDir = FsFile(context.cacheDir, "tsuzuri-shared-row-test-" + System.nanoTime())
+        val archive = sourceDir.subDir(ClipboardFileStorage.CLIPBOARD_FILES_PATH)
+        archive.mkdirs()
+        val archiveId = (System.nanoTime() and Long.MAX_VALUE).coerceAtLeast(1L)
+        archive.subFile(archiveId.toString()).writeText("shared-row-fixture")
+        val manager = context.clipboardManager().value
+        val db = ClipboardHistoryDatabase.new(context)
+        var shared: Uri? = null
+        try {
+            val entries = ClipboardBackupMediaImporter.prepare(
+                context, sourceDir, oldPackage, 127,
+                listOf(
+                    oldImage(archiveId).copy(isPinned = true),
+                    oldImage(archiveId).copy(creationTimestampMs = System.currentTimeMillis() + 10),
+                ),
+                ItemType.IMAGE,
+            )
+            assertEquals(2, entries.size)
+            assertEquals(entries[0].uri, entries[1].uri)
+            shared = entries[0].uri
+            manager.restoreHistoryForRestore(entries)
+            val dbRows = db.clipboardItemDao().getAll().filter { it.uri == shared }
+            assertEquals(2, dbRows.size)
+            val pinned = dbRows.single { it.isPinned }
+            val unpinned = dbRows.single { !it.isPinned }
+            assertTrue(manager.deleteClipAwait(unpinned, onlyIfUnpinned = true))
+            val file = ClipboardFileStorage.getFileForId(context, ContentUris.parseId(shared))
+            assertTrue("Pinned row must retain media", file.exists())
+            assertTrue(db.clipboardItemDao().getAll().any { it.id == pinned.id })
+            assertTrue(manager.deleteClipAwait(pinned, onlyIfUnpinned = false))
+            assertFalse("Last media reference removed", file.exists())
+        } finally {
+            shared?.let { uri ->
+                db.clipboardItemDao().getAll()
+                    .filter { it.uri == uri }
+                    .forEach { row -> manager.deleteClipAwait(row, onlyIfUnpinned = false) }
+            }
+            db.close()
+            sourceDir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun conditionalDeletionRetainsPinnedImageFileUntilExplicitlyDeleted() = runBlocking {
         val sourceDir = FsFile(context.cacheDir, "tsuzuri-pinned-test-" + System.nanoTime())
         val archiveFiles = sourceDir.subDir(ClipboardFileStorage.CLIPBOARD_FILES_PATH)
