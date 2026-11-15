@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import org.florisboard.lib.android.showShortToast
 import org.florisboard.lib.android.showShortToastSync
 import org.ownkey.offline.LiveTranscription
@@ -667,9 +668,15 @@ class VoxtralDictationManager(
             TranscriptionBackend.MOCK -> TranscriptionSession(backend, NoOpAudioRecorder(), mockTranscriptionClient, dictionary)
             TranscriptionBackend.EXTERNAL_IME -> TranscriptionSession(backend, mockAudioRecorder, null)
             TranscriptionBackend.CLOUD -> {
-                val key = apiKey()
-                val endpoint = prefs.voxtral.endpointUrl.get()
-                val model = prefs.voxtral.model.get()
+                // Snapshot the provider and its credential as ONE operation.
+                // Settings host switching holds the same lock while clearing credentials.
+                val (key, endpoint, model) = CloudVoiceProviderGuard.mutex.withLock {
+                    Triple(
+                        apiKey(),
+                        prefs.voxtral.endpointUrl.get(),
+                        prefs.voxtral.model.get(),
+                    )
+                }
                 val language = TranscriptionLanguageHints.resolve(purpose, prefs.voxtral.languageHint.get(), subtypeManager.activeSubtype.primaryLocale.languageTag())
                 // The client falls back to the default endpoint for a blank preference; the hint
                 // field must be resolved from the same URL the request will actually use.
@@ -687,25 +694,22 @@ class VoxtralDictationManager(
     }
 
     private fun apiKey(): String {
+        // Never write the legacy key from a mere presence check. A concurrent
+        // provider switch can otherwise delete the old encrypted key and then
+        // find it silently re-created by a read of this legacy preference.
         val secureApiKey = voxtralSecretsStore.getApiKey().trim()
-        if (secureApiKey.isNotEmpty()) {
-            return secureApiKey
-        }
-
-        val legacyApiKey = prefs.voxtral.apiKey.get().trim()
-        if (legacyApiKey.isNotEmpty()) {
-            voxtralSecretsStore.setApiKey(legacyApiKey)
-            scope.launch {
-                prefs.voxtral.apiKey.set("")
-            }
-            return legacyApiKey
-        }
-
-        return ""
+        return secureApiKey.ifEmpty { prefs.voxtral.apiKey.get().trim() }
     }
 
     private fun migrateLegacyApiKeyIfNeeded() {
-        apiKey()
+        // One-time migration at construction, before any recording session. The
+        // settings host switch also clears this field durably before host update.
+        val legacy = prefs.voxtral.apiKey.get().trim()
+        if (legacy.isEmpty()) return
+        if (voxtralSecretsStore.getApiKey().isBlank()) {
+            voxtralSecretsStore.setApiKey(legacy)
+        }
+        scope.launch { prefs.voxtral.apiKey.set("") }
     }
 
     fun isLocalSelected(): Boolean = resolveTranscriptionBackend() == TranscriptionBackend.ORUKEET
