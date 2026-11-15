@@ -36,6 +36,17 @@ object PreScreenFormatting {
             while (end < source.length && source[end].isLetterOrDigit()) end++
         }
         if (start == end) return null
+        // Heading, quote and fenced code are block syntax. Grow a selected
+        // word/fragment to whole line boundaries so markers never end up
+        // inside an existing line (e.g. "hello # world").
+        if (format == PreScreenFormat.HEADING ||
+            format == PreScreenFormat.QUOTE || format == PreScreenFormat.CODE_BLOCK
+        ) {
+            start = source.lastIndexOf('\n', start - 1) + 1
+            val lastCovered = if (end > start && source[end - 1] == '\n') end - 1 else end
+            val nextNewline = source.indexOf('\n', lastCovered)
+            end = if (nextNewline < 0) source.length else nextNewline
+        }
         // Avoid cutting an emoji surrogate pair in half.
         if (start > 0 && start < source.length &&
             Character.isHighSurrogate(source[start - 1]) &&
