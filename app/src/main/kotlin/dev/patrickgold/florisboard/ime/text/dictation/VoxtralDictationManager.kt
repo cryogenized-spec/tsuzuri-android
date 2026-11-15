@@ -34,6 +34,9 @@ import dev.patrickgold.florisboard.ime.text.dictation.dictionary.DictationInsert
 import dev.patrickgold.florisboard.ime.text.dictation.dictionary.DictationInsertionListener
 import dev.patrickgold.florisboard.ime.text.dictation.dictionary.OrdinaryDictationCleanup
 import dev.patrickgold.florisboard.ime.text.rewrite.AiAvailability
+import dev.patrickgold.florisboard.ime.text.rewrite.LlmRewriteClient
+import dev.patrickgold.florisboard.ime.text.rewrite.LlmRewriteSecretsStore
+import dev.patrickgold.florisboard.ime.text.rewrite.LlmVoiceRewriteOperation
 import dev.patrickgold.florisboard.ime.text.rewrite.AiAvailabilityPolicy
 import dev.patrickgold.florisboard.speechDictionary
 import dev.patrickgold.florisboard.lib.devtools.flogError
@@ -89,6 +92,7 @@ class VoxtralDictationManager(
     private val prefs by FlorisPreferenceStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val voxtralSecretsStore = VoxtralSecretsStore(appContext)
+    private val cleanupSecretsStore by lazy { LlmRewriteSecretsStore(appContext) }
 
     private val mockAudioRecorder: AudioRecorder = NoOpAudioRecorder()
     private val mockTranscriptionClient: TranscriptionClient = MockTranscriptionClient()
@@ -326,6 +330,7 @@ class VoxtralDictationManager(
             autoStopJob?.cancel(); autoStopJob = null
             val session = activeSession ?: return@launch
             val transcriptionClient = session.client ?: return@launch
+            val targetEditorSessionId = editorInstance.activeInputSessionId
             val rawOutcome = transcriptionOnlyOperation.stopAndTranscribe(lease, transcriptionClient)
             // Ordinary dictation is the only path that is cleaned. It uses the snapshot taken at
             // recording start, runs off the main thread, and the lease is rechecked right before commit.
@@ -333,7 +338,8 @@ class VoxtralDictationManager(
                 OrdinaryDictationCleanup.apply(rawOutcome, session.dictionary?.cleaner)
             }
 
-            if (!lease.isCurrent) {
+            if (!lease.isCurrent || editorInstance.activeInputSessionId != targetEditorSessionId ||
+                aiAvailabilityPolicy.current() !is AiAvailability.Available) {
                 feedbackController.cancel(lease.sessionId)
                 if (activeLease?.sessionId == lease.sessionId) {
                     activeLease = null
@@ -353,7 +359,17 @@ class VoxtralDictationManager(
                 appContext.showShortToastSync(appContext.getString(dev.patrickgold.florisboard.R.string.speech_dictionary__only_fillers))
                 return@launch
             }
-            val outcome = (cleaned as DictationCleanupResult.Ready).outcome
+            val locallyCleaned = (cleaned as DictationCleanupResult.Ready).outcome
+            val outcome = applyConfiguredAutoCleanup(locallyCleaned)
+            // A text-model request may have taken seconds. Never insert a result into a new
+            // editor or into an incognito/secure field that appeared during that request.
+            if (!lease.isCurrent || editorInstance.activeInputSessionId != targetEditorSessionId ||
+                aiAvailabilityPolicy.current() !is AiAvailability.Available) {
+                feedbackController.cancel(lease.sessionId)
+                finishSession(lease)
+                _stateFlow.value = DictationState.IDLE
+                return@launch
+            }
 
             when (val commitResult = ordinaryDictationCommitOperation.commit(outcome)) {
                 OrdinaryDictationCommitResult.Committed -> {
@@ -684,6 +700,47 @@ class VoxtralDictationManager(
                 ), dictionary)
             }
         }
+    }
+
+    /**
+     * One additional request, only when the user explicitly selected natural/concise
+     * cleanup. This uses the separate text-model BYOK key, never the speech provider key.
+     * A failure is visible and preserves the raw/local-dictionary transcript.
+     */
+    private suspend fun applyConfiguredAutoCleanup(outcome: TranscriptionOutcome): TranscriptionOutcome {
+        if (outcome !is TranscriptionOutcome.Transcript) return outcome
+        val mode = VoiceAutoCleanupMode.fromPreference(prefs.voxtral.dictationAutoCleanupMode.get())
+        if (mode == VoiceAutoCleanupMode.OFF) return outcome
+        if (aiAvailabilityPolicy.current() !is AiAvailability.Available) return outcome
+
+        val config = kotlinx.coroutines.withContext(Dispatchers.IO) {
+            val key = runCatching { cleanupSecretsStore.getApiKey().trim() }.getOrDefault("")
+            if (key.isEmpty()) null else listOf(
+                key,
+                prefs.voxtral.postProcessingEndpointUrl.get(),
+                prefs.voxtral.postProcessingModel.get(),
+                prefs.voxtral.postProcessingProvider.get(),
+            )
+        }
+        if (config == null) {
+            appContext.showShortToastSync("AI voice cleanup needs a text-model API key; using original dictation.")
+            return outcome
+        }
+        val client = LlmRewriteClient(
+            apiKeyProvider = { config[0] },
+            endpointUrlProvider = { config[1] },
+            modelProvider = { config[2] },
+            providerIdProvider = { config[3] },
+        )
+        val result = kotlinx.coroutines.withContext(Dispatchers.IO) {
+            VoiceAutoCleanupProcessor(LlmVoiceRewriteOperation(client)).process(outcome.text, mode)
+        }
+        val revised = result.getOrNull()
+        if (revised == null) {
+            appContext.showShortToastSync("AI cleanup failed; using original dictation.")
+            return outcome
+        }
+        return TranscriptionOutcome.Transcript(revised)
     }
 
     private fun apiKey(): String {
