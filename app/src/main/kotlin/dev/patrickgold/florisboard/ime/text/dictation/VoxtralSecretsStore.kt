@@ -64,4 +64,13 @@ class VoxtralSecretsStore(
     fun clearApiKey() {
         encryptedPrefs.edit().remove(KEY_API_KEY).apply()
     }
+
+    /**
+     * Provider-host switches must durably erase the old key before saving the new host.
+     * SharedPreferences.apply() changes only the in-memory state immediately and cannot
+     * detect persistence failures; commit() reports the durable disk write result.
+     * Call this on Dispatchers.IO, not the main thread.
+     */
+    fun clearApiKeyDurably(): Boolean =
+        encryptedPrefs.edit().remove(KEY_API_KEY).commit()
 }
