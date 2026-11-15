@@ -149,8 +149,12 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
                     val action = TextEditingShortcuts.dataFor(
                         computedLabel, kv, evaluator.editorInfo.isRichInputEditor,
                         prefs.keyboard.editingShortcutsEnabled.get(),
+                        evaluator.state.isSelectionMode,
                     )
-                    if (action != null && computedPopups.relevant.none { it.code == action.code }) {
+                    // Popup actions bypass the normal key's enabled state;
+                    // apply the same action eligibility check to them.
+                    if (action != null && evaluator.evaluateEnabled(action) &&
+                        computedPopups.relevant.none { it.code == action.code }) {
                         computedPopups.relevant.add(action)
                     }
                 }
