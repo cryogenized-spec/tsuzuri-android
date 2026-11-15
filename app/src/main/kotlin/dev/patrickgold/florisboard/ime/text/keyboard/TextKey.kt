@@ -18,6 +18,7 @@ package dev.patrickgold.florisboard.ime.text.keyboard
 
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.app.settings.symbols.SymbolShortcutStore
+import dev.patrickgold.florisboard.app.settings.symbols.SymbolPopupArrangement
 import dev.patrickgold.florisboard.ime.keyboard.AbstractKeyData
 import dev.patrickgold.florisboard.ime.keyboard.ComputingEvaluator
 import dev.patrickgold.florisboard.ime.keyboard.Key
@@ -124,17 +125,26 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
                     computed.type == KeyType.CHARACTER &&
                     computed.groupId == KeyData.GROUP_DEFAULT
                 ) {
-                    val existingSymbols = computedPopups.relevant
-                        .map { it.asString(isForDisplay = false) }.toSet()
-                    for (symbol in SymbolShortcutStore.forKey(computedLabel)) {
-                        if (symbol in existingSymbols) continue
-                        val points = symbol.codePoints().toArray()
-                        val keyData: KeyData = if (points.size == 1) {
-                            TextKeyData(type = KeyType.CHARACTER, code = points[0], label = symbol)
-                        } else {
-                            MultiTextKeyData(type = KeyType.CHARACTER, codePoints = points, label = symbol)
+                    if (SymbolShortcutStore.keyOf(computedLabel) != null) {
+                        val originalEntries = listOfNotNull(computedPopups.main) + computedPopups.relevant
+                        val customEntries = SymbolShortcutStore.forKey(computedLabel).map { symbol ->
+                            val points = symbol.codePoints().toArray()
+                            if (points.size == 1) {
+                                TextKeyData(type = KeyType.CHARACTER, code = points[0], label = symbol)
+                            } else {
+                                MultiTextKeyData(type = KeyType.CHARACTER, codePoints = points, label = symbol)
+                            }
                         }
-                        computedPopups.relevant.add(keyData)
+                        val arranged = SymbolPopupArrangement.arrange(
+                            key = computedLabel,
+                            inherited = originalEntries,
+                            custom = customEntries,
+                            options = SymbolShortcutStore.options(),
+                            label = { it.asString(isForDisplay = false) },
+                        )
+                        computedPopups.main = arranged.firstOrNull()
+                        computedPopups.relevant.clear()
+                        computedPopups.relevant.addAll(arranged.drop(1))
                     }
                 }
                 // Preserve inherited accents and custom Unicode choices while
