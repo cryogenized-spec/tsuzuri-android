@@ -178,14 +178,24 @@ fun RestoreScreen() = FlorisScreen {
             withContext(Dispatchers.IO) { readArchiveItems(Backup.CLIPBOARD_VIDEO_JSON_NAME) }
         } else emptyList()
         withContext(Dispatchers.IO) {
-            ClipboardBackupMediaImporter.validate(
+            val imageBytes = ClipboardBackupMediaImporter.validate(
                 archiveClipboardDir, workspace.metadata.packageName,
                 workspace.metadata.versionCode, imageArchive, ItemType.IMAGE,
             )
-            ClipboardBackupMediaImporter.validate(
+            val videoBytes = ClipboardBackupMediaImporter.validate(
                 archiveClipboardDir, workspace.metadata.packageName,
                 workspace.metadata.versionCode, videoArchive, ItemType.VIDEO,
             )
+            require(imageBytes <= 256L * 1024L * 1024L - videoBytes) {
+                "Backup clipboard media exceeds aggregate size budget"
+            }
+            val imageRows = imageArchive.count {
+                it.type == ItemType.IMAGE && ClipboardRetentionPolicy.shouldPersist(it.isSensitive)
+            }
+            val videoRows = videoArchive.count {
+                it.type == ItemType.VIDEO && ClipboardRetentionPolicy.shouldPersist(it.isSensitive)
+            }
+            require(imageRows + videoRows <= 999) { "Too many backup clipboard media rows" }
         }
 
         // Fail speech persistence before changing the other selected restore targets.
