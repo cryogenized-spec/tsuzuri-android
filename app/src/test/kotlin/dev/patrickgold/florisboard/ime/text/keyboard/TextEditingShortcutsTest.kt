@@ -11,8 +11,9 @@ import io.kotest.matchers.shouldBe
 
 class TextEditingShortcutsTest : FunSpec({
     fun action(key: String, variation: KeyVariation = KeyVariation.NORMAL,
-               rich: Boolean = true, enabled: Boolean = true): Int? =
-        TextEditingShortcuts.dataFor(key, variation, rich, enabled)?.code
+               rich: Boolean = true, enabled: Boolean = true,
+               hasSelection: Boolean = true): Int? =
+        TextEditingShortcuts.dataFor(key, variation, rich, enabled, hasSelection)?.code
 
     test("Windows-style long-press keys invoke existing editing actions") {
         action("a") shouldBe KeyCode.CLIPBOARD_SELECT_ALL
