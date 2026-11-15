@@ -59,6 +59,14 @@ internal fun StickerPalette(modifier: Modifier = Modifier) {
         return
     }
     val editor by context.editorInstance()
+    val editorInfo by editor.activeInfoFlow.collectAsState()
+    val sessionId by editor.activeInputSessionIdFlow.collectAsState()
+    if (sessionId == 0L || editorInfo.isRawInputEditor || !editor.canUseStickerMedia()) {
+        Column(modifier = modifier.fillMaxWidth().padding(12.dp)) {
+            Text("Stickers are available only in ordinary text fields.")
+        }
+        return
+    }
     val revision by StickerStore.revision.collectAsState()
     LaunchedEffect(Unit) { StickerStore.ensureLoaded(context) }
     val packs = remember(revision) { StickerStore.packs() }
