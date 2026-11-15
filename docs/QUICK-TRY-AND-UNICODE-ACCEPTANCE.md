@@ -33,6 +33,15 @@ Development UX acceptance plan · 2026-11-15 · draft PR #3
 9. Add four alternatives to one key; the fifth should be rejected visibly. Restart the app/IME; the four remain. Remove one and verify it disappears after the editor refreshes.
 10. Test on narrow phone and tablet; keyboard toggles, sheet pickers and symbol grids should fit without clipping or illegible touch targets.
 
+## Editing shortcut regression acceptance
+
+- With an ordinary text editor focused and no selection, long-press X or C must not offer Cut or Copy; pressing these letters normally still inserts a character.
+- Select a word, then use long-press X → Cut: only the selection is deleted and copied. Long-press C → Copy must not delete any text.
+- Dismiss a Cut popup by moving or collapsing the selection before activating the action. The editor must preserve existing text, never deleting the character before the cursor.
+- Select whitespace-only text and Cut it; leading/trailing spaces are valid selected content, not an empty selection.
+- Check A → Select All and V → Paste remain available without a pre-existing selection.
+- Repeat in a host editor that does not implement native context-menu clipboard actions; Tsuzuri must retain a safe local plaintext fallback.
+
 ## Known constraints
 
 - Android IMEs don't themselves force a host to accept rich content; editors choose their input type.
