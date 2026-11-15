@@ -60,6 +60,18 @@ jobs:
         uses: lukka/get-cmake@v4.0.2
       - name: Kotlin/Android static checks and compilation
         run: ./gradlew :app:lintDebug :lib:prediction:test :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --no-daemon --warning-mode=all
+      # Capture the complete inherited lint findings when the quality gate fails.
+      # This is diagnostic only: abortOnError and the merge gate stay enforced.
+      - name: Upload Android Lint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tsuzuri-android-lint-diagnostics
+          path: |
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-debug.xml
+            app/build/reports/lint-results-debug.txt
+          if-no-files-found: warn
       - name: Upload debug builds
         if: success()
         uses: actions/upload-artifact@v6
