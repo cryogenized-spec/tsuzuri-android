@@ -41,6 +41,7 @@ jobs:
           name: tsuzuri-browser-preview-screenshots
           path: |
             /tmp/tsuzuri-browser-desktop.png
-            /tmp/tsuzuri-browser-mobile.png
+            /tmp/tsuzuri-browser-mobile-portrait.png
+            /tmp/tsuzuri-browser-mobile-landscape.png
           if-no-files-found: ignore
           retention-days: 14
