@@ -69,7 +69,8 @@
             </div>
             <div class="composer-row">
               <button type="button" class="composer-action" id="clearComposer" aria-label="Clear draft">＋</button>
-              <textarea id="draft" rows="1" spellcheck="false" placeholder="Write a message…" aria-label="Mock message draft"></textarea>
+              <textarea id="draft" rows="1" spellcheck="false" inputmode="none" placeholder="Write a message…" aria-label="Mock message draft"></textarea>
+              <button type="button" class="composer-action" id="toggleNativeKeyboard" aria-label="Enable phone system keyboard for editing" aria-pressed="false" title="Enable the phone keyboard explicitly">⌨</button>
               <button type="button" id="sendDemo" class="send" aria-label="Send to simulated conversation">↑</button>
             </div>
             <div class="keyboard-ui" id="keyboardUi">
@@ -94,10 +95,10 @@
       <div class="section-lead"><span class="eyebrow">CUSTOMISATION</span><h2>Set the tone.</h2><p>Explore color, key shape and layout density. These controls affect the preview; Android parity is still under test.</p></div>
       <div class="settings-card"><h3>Color environment</h3><p>Choose a starting palette.</p><div id="themeOptions" class="theme-grid"></div></div>
       <div class="settings-card"><h3>Keyboard geometry</h3>
-        <div class="option-row"><div><strong>Number row</strong><small>Show digits above letters</small></div><label class="switch"><input id="numberRow" type="checkbox"><span></span></label></div>
-        <div class="option-row"><div><strong>Rounded keycaps</strong><small>Switch between soft and square edges</small></div><label class="switch"><input id="roundKeys" type="checkbox" checked><span></span></label></div>
-        <div class="option-row"><div><strong>One-handed keyboard</strong><small>Narrow the keys toward the right edge</small></div><label class="switch"><input id="oneHanded" type="checkbox"><span></span></label></div>
-        <div class="option-row"><div><strong>Keyboard letters</strong><small>Visual keyboard row order</small></div><select id="layoutChoice"><option value="qwerty">QWERTY</option><option value="azerty">AZERTY</option><option value="qwertz">QWERTZ</option></select></div>
+        <div class="option-row"><div><strong>Number row</strong><small>Show digits above letters</small></div><label class="switch"><input id="numberRow" type="checkbox" aria-label="Show number row"><span></span></label></div>
+        <div class="option-row"><div><strong>Rounded keycaps</strong><small>Switch between soft and square edges</small></div><label class="switch"><input id="roundKeys" type="checkbox" aria-label="Rounded keycaps" checked><span></span></label></div>
+        <div class="option-row"><div><strong>One-handed keyboard</strong><small>Narrow the keys toward the right edge</small></div><label class="switch"><input id="oneHanded" type="checkbox" aria-label="One-handed keyboard"><span></span></label></div>
+        <div class="option-row"><div><strong>Keyboard letters</strong><small>Visual keyboard row order</small></div><select id="layoutChoice" aria-label="Keyboard layout"><option value="qwerty">QWERTY</option><option value="azerty">AZERTY</option><option value="qwertz">QWERTZ</option></select></div>
         <div class="option-row"><div><strong>Accent colour</strong><small>Used for highlights and selected controls</small></div><input id="accentColor" type="color" value="#a78bfa" aria-label="Accent colour"></div>
       </div>
     </section>
