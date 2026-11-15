@@ -62,6 +62,13 @@ class SymbolShortcutStoreTest : FunSpec({
         ) shouldBe listOf("é", "è", "1", "£", "∑", "🐻")
     }
 
+    test("approved U+ shaped text is stored verbatim, never decoded a second time") {
+        val rendered = SymbolShortcutStore.decodeUserInput("U+0055 U+002B U+0034 U+0031")
+        rendered shouldBe "U+41"
+        SymbolShortcutStore.validatedApprovedSymbols(listOf(rendered.orEmpty())) shouldBe listOf("U+41")
+        SymbolShortcutStore.validatedApprovedSymbols(listOf("hello\\nworld")) shouldBe null
+    }
+
     test("default preserves inherited popup ordering") {
         SymbolPopupArrangement.arrange(
             "Q", listOf("1", "@"), listOf("☠️"),
