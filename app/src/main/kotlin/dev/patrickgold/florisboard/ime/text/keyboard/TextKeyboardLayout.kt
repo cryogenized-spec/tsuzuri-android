@@ -398,7 +398,9 @@ fun TextKeyboardLayout(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .blur(if (dpadVisible) 8.dp else 0.dp),
+                // Blur(0.dp) still clips popup layers: skip the modifier
+                // entirely during normal typing so accents aren't cut off.
+                .then(if (dpadVisible) Modifier.blur(8.dp) else Modifier),
         ) {
             for (textKey in keyboard.keys()) {
                 TextKeyButton(
@@ -413,7 +415,12 @@ fun TextKeyboardLayout(
         }
         if (dpadVisible) {
             CursorDpadOverlay(
-                onMove = { direction -> keyboardManager.handleArrow(direction) },
+                onMove = { direction ->
+                    // Emoji-search text belongs to the IME, not the host editor.
+                    if (!keyboardManager.emojiSearch.isActive) {
+                        keyboardManager.handleArrow(direction)
+                    }
+                },
                 onDismiss = { dpadVisible = false },
             )
         }
@@ -733,7 +740,9 @@ private class TextKeyboardLayoutController(
                     pointer.hasTriggeredLongPress = true
                     when (key.computedData.code) {
                         KeyCode.SPACE, KeyCode.CJK_SPACE -> {
-                            if (prefs.keyboard.spacebarDpadEnabled.get()) {
+                            if (prefs.keyboard.spacebarDpadEnabled.get() &&
+                                !keyboardManager.emojiSearch.isActive
+                            ) {
                                 onDpadRequested()
                                 return@onLongPress true
                             }

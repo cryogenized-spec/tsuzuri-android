@@ -562,12 +562,9 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         notifyKeyboardEdit()
         autoSpace.setInactive()
         phantomSpace.setInactive()
-        // The host can provide styled HTML/spans, which our plaintext fallback
-        // cannot reconstruct. Only fall back if the host declines the action.
-        if (activeInfo.isRichInputEditor &&
-            !prefs.clipboard.useInternalClipboard.get() &&
-            currentInputConnection()?.performContextMenuAction(android.R.id.cut) == true
-        ) return true
+        // Use the keyboard-owned clipboard path for deterministic cut.
+        // An IME context-menu RPC can acknowledge dispatch while the host
+        // silently ignores the command; never report that as success.
         val text = activeContent.selectedText.ifBlank { currentInputConnection()?.getSelectedText(0) }
         if (text != null) {
             clipboardManager.addNewPlaintext(text.toString())
@@ -587,10 +584,8 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         notifyKeyboardEdit()
         autoSpace.setInactive()
         phantomSpace.setInactive()
-        if (activeInfo.isRichInputEditor &&
-            !prefs.clipboard.useInternalClipboard.get() &&
-            currentInputConnection()?.performContextMenuAction(android.R.id.copy) == true
-        ) return true
+        // Keep copy on the proven selection -> clipboard path; host-side
+        // copy requests do not reliably report whether any data was copied.
         val text = activeContent.selectedText.ifBlank { currentInputConnection()?.getSelectedText(0) }
         if (text != null) {
             clipboardManager.addNewPlaintext(text.toString())
@@ -611,12 +606,10 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         notifyKeyboardEdit()
         autoSpace.setInactive()
         phantomSpace.setInactive()
-        // Preserve original clipboard MIME variants by letting the target app
-        // choose among text/plain, text/html and styled text. Internal mode
-        // stays entirely within Tsuzuri's existing clipboard pipeline.
-        if (!prefs.clipboard.useInternalClipboard.get() &&
-            currentInputConnection()?.performContextMenuAction(android.R.id.paste) == true
-        ) return true
+        // The native context-menu IPC may return true even when the host
+        // doesn't implement paste. Keep the reliable IME content fallback.
+        // Markdown source text is preserved byte-for-byte as text; rich HTML
+        // clipboard transfer will need an explicit MIME-aware pathway.
         return commitClipboardItem(clipboardManager.primaryClip).also { result ->
             if (!result) {
                 appContext.showShortToastSync("Failed to paste item.")
