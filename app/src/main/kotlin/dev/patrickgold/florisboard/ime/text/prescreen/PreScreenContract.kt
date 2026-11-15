@@ -90,7 +90,7 @@ object PreScreenContract {
             val kind = PreScreenKind.of(item.requiredString("kind"))
                 ?: error("Unknown suggestion category.")
             require(id.matches(idPattern))
-            require(label.isNotBlank() && label.length <= 80 && label.none { it.isISOControl() })
+            require(label.isNotBlank() && label.length <= 80 && label.none { it.code < 0x20 || it.code == 0x7F })
             require(instruction.isNotBlank() && instruction.length <= 350)
             PreScreenAction(id, label, instruction, kind)
         }
