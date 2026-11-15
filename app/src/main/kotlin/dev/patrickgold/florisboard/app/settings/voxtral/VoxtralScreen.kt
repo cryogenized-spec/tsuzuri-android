@@ -363,7 +363,8 @@ fun VoxtralScreen() = FlorisScreen {
                                 val cleared = voiceSwitcher.editKeyForHost(endpointUrl) {
                                     runCatching { voxtralSecretsStore.clearApiKeyDurably() }.getOrDefault(false)
                                 }
-                                AiSettings.apiKeyRemoved(cleared && !readKey { voxtralSecretsStore.hasApiKey() })
+                                val hasKeyAfter = readKey { voxtralSecretsStore.hasApiKey() }
+                                ApiKeyChange(hasKey = hasKeyAfter, succeeded = cleared && !hasKeyAfter)
                             }
                             hasCloudKey = change.hasKey
                             if (!change.succeeded) {
