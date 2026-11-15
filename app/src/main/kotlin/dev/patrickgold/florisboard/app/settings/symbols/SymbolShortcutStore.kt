@@ -186,7 +186,11 @@ internal object SymbolShortcutStore {
         }
 
     /** Atomically apply a fully validated AI proposal, only after explicit user approval. */
-    suspend fun replaceApproved(context: Context, changes: Map<String, List<String>>): Boolean =
+    suspend fun replaceApproved(
+        context: Context,
+        changes: Map<String, List<String>>,
+        expected: Map<String, List<String>>? = null,
+    ): Boolean =
         withContext(Dispatchers.IO) {
             if (changes.isEmpty() || changes.size > 26) return@withContext false
             val verified = LinkedHashMap<String, List<String>>()
@@ -199,6 +203,12 @@ internal object SymbolShortcutStore {
             }
             storageMutex.withLock {
                 loadLocked(context)
+                // Prevent a model proposal from overwriting manual edits that
+                // arrived between approval and taking the storage mutex.
+                if (expected != null && expected.any { (key, old) ->
+                        cached[key].orEmpty() != old
+                    }
+                ) return@withLock false
                 val preferences = context.applicationContext.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
                 val editor = preferences.edit()
                 for ((key, symbols) in verified) {
