@@ -25,6 +25,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -191,7 +192,11 @@ internal object StickerStore {
                     snapshot.packs.none { it.id == packId } ||
                     source.scheme != "content") return@withLock false
 
-                val mime = context.contentResolver.getType(source)
+                val mime = try {
+                    context.contentResolver.getType(source)
+                } catch (_: Exception) {
+                    null
+                }
                 if (!StickerRules.supportedMime(mime)) return@withLock false
                 val bytes = try {
                     context.contentResolver.openInputStream(source)?.use { input ->
