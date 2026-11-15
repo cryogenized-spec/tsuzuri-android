@@ -424,7 +424,7 @@ fun SymbolShortcutScreen() = FlorisScreen {
                                     }
                                     if (!unchanged) {
                                         aiMessage = "Keyboard assignments changed. Reject and generate again."
-                                    } else if (SymbolShortcutStore.replaceApproved(context, staged.changes)) {
+                                    } else if (SymbolShortcutStore.replaceApproved(context, staged.changes, expected = baseline)) {
                                         aiMessage = "Approved and saved. Changes are live on the keyboard."
                                         aiProposal = null
                                         aiBaseline = null
