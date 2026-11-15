@@ -85,8 +85,8 @@ class PreScreenContractTest : FunSpec({
             "hello world", 7, 7, PreScreenFormat.HEADING, PreScreenSyntax.WHATSAPP
         )?.text shouldBe "*hello world*"
         PreScreenFormatting.apply(
-            "first line\\nsecond line", 3, 3, PreScreenFormat.HEADING, PreScreenSyntax.MARKDOWN
-        )?.text shouldBe "# first line\\nsecond line"
+            "first line\nsecond line", 3, 3, PreScreenFormat.HEADING, PreScreenSyntax.MARKDOWN
+        )?.text shouldBe "# first line\nsecond line"
     }
     test("invalid or empty selections never alter the draft") {
         PreScreenFormatting.apply(
