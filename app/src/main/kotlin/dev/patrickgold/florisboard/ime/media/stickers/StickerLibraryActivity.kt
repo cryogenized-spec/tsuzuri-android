@@ -5,6 +5,7 @@
 package dev.patrickgold.florisboard.ime.media.stickers
 
 import android.os.Bundle
+import android.app.KeyguardManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -38,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -96,12 +98,27 @@ internal fun StickerThumbnail(item: StickerEntry, modifier: Modifier = Modifier)
 @Composable
 internal fun StickerLibraryScreen(onClose: () -> Unit) {
     val context = LocalContext.current
+    val keyguard = remember { context.getSystemService(KeyguardManager::class.java) }
+    if (keyguard == null || keyguard.isDeviceLocked || keyguard.isKeyguardLocked) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Unlock the device before managing private stickers.")
+            TextButton(onClick = onClose) { Text("Close") }
+        }
+        return
+    }
     val scope = rememberCoroutineScope()
     val revision by StickerStore.revision.collectAsState()
-    LaunchedEffect(Unit) { StickerStore.ensureLoaded(context) }
+    var loaded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        StickerStore.ensureLoaded(context)
+        loaded = true
+    }
     val packs = remember(revision) { StickerStore.packs() }
-    var selectedPackId by remember { mutableStateOf("default") }
-    if (packs.none { it.id == selectedPackId }) selectedPackId = "default"
+    var selectedPackId by rememberSaveable { mutableStateOf("default") }
+    // The result can arrive after the manager is recreated. Preserve the
+    // original destination independently of the current tab selection.
+    var pendingImportPackId by rememberSaveable { mutableStateOf<String?>(null) }
+    if (loaded && packs.none { it.id == selectedPackId }) selectedPackId = "default"
     val entries = remember(revision, selectedPackId) { StickerStore.stickers(selectedPackId) }
     var name by remember { mutableStateOf("") }
     var feedback by remember { mutableStateOf("") }
@@ -113,7 +130,7 @@ internal fun StickerLibraryScreen(onClose: () -> Unit) {
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
         if (uris.isNotEmpty()) {
-            val target = selectedPackId
+            val target = pendingImportPackId ?: selectedPackId
             importing = true
             scope.launch {
                 try {
@@ -125,6 +142,7 @@ internal fun StickerLibraryScreen(onClose: () -> Unit) {
                         "Supported formats: PNG, JPEG and WebP."
                 } finally {
                     importing = false
+                    pendingImportPackId = null
                 }
             }
         }
@@ -210,7 +228,10 @@ internal fun StickerLibraryScreen(onClose: () -> Unit) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
-                onClick = { picker.launch(arrayOf("image/png", "image/jpeg", "image/webp")) },
+                onClick = {
+                    pendingImportPackId = selectedPackId
+                    picker.launch(arrayOf("image/png", "image/jpeg", "image/webp"))
+                },
                 enabled = !importing && StickerStore.count() < StickerRules.MAX_STICKERS,
                 modifier = Modifier.testTag("sticker-import"),
             ) { Text(if (importing) "Importing…" else "Import images") }
