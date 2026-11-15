@@ -34,13 +34,16 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -152,6 +155,12 @@ fun HomeScreen() = FlorisScreen {
         val oneHand = QuickHandPreset.of(
             windowConfigs, configuration.screenWidthDp, configuration.screenHeightDp,
         )
+        val storedHeight = QuickKeyboardHeight.shown(
+            windowConfigs, configuration.screenWidthDp, configuration.screenHeightDp,
+        )
+        var chosenHeight by remember(
+            storedHeight, configuration.screenWidthDp, configuration.screenHeightDp,
+        ) { mutableFloatStateOf(storedHeight.toFloat()) }
         var showInputDemo by remember { mutableStateOf(false) }
         var quickInputDemo by remember { mutableStateOf(QuickInputDemo.TEXT) }
         var scratchInput by remember { mutableStateOf("") }
@@ -268,6 +277,36 @@ fun HomeScreen() = FlorisScreen {
                         )
                     }
                 },
+            )
+
+            Text(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                text = "Keyboard height · ${chosenHeight.roundToInt()}%",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Slider(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .testTag("quick-try-height"),
+                value = chosenHeight,
+                onValueChange = { chosenHeight = it },
+                onValueChangeFinished = {
+                    val percent = chosenHeight.roundToInt()
+                    quickTryScope.launch {
+                        settingsPrefs.keyboard.windowConfig.set(
+                            QuickKeyboardHeight.update(
+                                settingsPrefs.keyboard.windowConfig.get(),
+                                configuration.screenWidthDp,
+                                configuration.screenHeightDp,
+                                percent,
+                            ),
+                        )
+                    }
+                },
+                valueRange = QuickKeyboardHeight.MIN_PERCENT.toFloat()..
+                    QuickKeyboardHeight.MAX_PERCENT.toFloat(),
+                steps = 11,
             )
 
             OwnkeyRow(
