@@ -250,3 +250,32 @@ internal enum class SymbolCategory(val title: String, val symbols: List<String>)
     DECORATION("Symbols", listOf("©", "®", "™", "§", "¶", "•", "★", "☆", "♥", "♦", "♠", "♣", "✓", "✕")),
     EMOJI("Emoji", listOf("🐻", "🐈", "🐕", "🌹", "✨", "🔥", "❤️", "🌙", "🌻", "🍀", "🙂", "😂")),
 }
+
+/**
+ * Stable layout policy for inherited popup entries and user-saved Unicode symbols.
+ * The caller owns the key objects; this policy only decides their ordering.
+ */
+internal object SymbolPopupArrangement {
+    fun <T> arrange(
+        key: String,
+        inherited: List<T>,
+        custom: List<T>,
+        options: SymbolPopupOptions,
+        label: (T) -> String,
+    ): List<T> {
+        val natural = inherited.filter { item ->
+            options.showAccents || !SymbolShortcutStore.isAccentVariant(key, label(item))
+        }
+        val ordered = when (options.priority) {
+            SymbolPopupPriority.ORIGINAL -> natural + custom
+            SymbolPopupPriority.ACCENTS_FIRST -> {
+                natural.filter { SymbolShortcutStore.isAccentVariant(key, label(it)) } +
+                    natural.filterNot { SymbolShortcutStore.isAccentVariant(key, label(it)) } + custom
+            }
+            SymbolPopupPriority.CUSTOM_FIRST -> custom + natural
+        }
+        // A custom copy of an inherited accent remains accessible even when
+        // "Show inherited accents" is switched off.
+        return ordered.distinctBy(label)
+    }
+}
