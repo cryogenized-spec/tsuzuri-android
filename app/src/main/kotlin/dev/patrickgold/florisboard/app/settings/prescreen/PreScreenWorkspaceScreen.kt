@@ -39,9 +39,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import dev.patrickgold.florisboard.app.Routes
@@ -170,25 +167,7 @@ fun PreScreenWorkspaceScreen(workspace: PreScreenWorkspaceState) = FlorisScreen 
         val activeSpelling = if (checkedDraft == draft.text && spellingEnabled) {
             spellingIssues.filterNot { (it.word.start to it.word.text) in ignoredSpelling }
         } else emptyList()
-        val underlinedDraft = remember(draft.text, activeSpelling) {
-            VisualTransformation { original ->
-                val annotated = buildAnnotatedString {
-                    append(original)
-                    for (issue in activeSpelling) {
-                        if (issue.word.end <= original.length) {
-                            addStyle(
-                                SpanStyle(
-                                    color = Color(0xFFCF2E2E),
-                                    textDecoration = TextDecoration.Underline,
-                                ),
-                                issue.word.start, issue.word.end,
-                            )
-                        }
-                    }
-                }
-                TransformedText(annotated, OffsetMapping.Identity)
-            }
-        }
+
 
         fun requestEdit(editInstruction: String, category: PreScreenKind? = null) {
             if (busy || editInstruction.isBlank()) return
@@ -261,8 +240,9 @@ fun PreScreenWorkspaceScreen(workspace: PreScreenWorkspaceState) = FlorisScreen 
                     "No AI request is made until you ask for one.",
                 style = MaterialTheme.typography.bodyMedium,
             )
-            OutlinedTextField(
+            SpellingDraftField(
                 value = draft,
+                issues = activeSpelling,
                 onValueChange = { updated ->
                     if (updated.text.length <= PreScreenContract.MAX_SOURCE_CHARS) {
                         if (updated.text != draft.text) {
@@ -279,11 +259,7 @@ fun PreScreenWorkspaceScreen(workspace: PreScreenWorkspaceState) = FlorisScreen 
                         draft = updated
                     }
                 },
-                label = { Text("Local draft / paste text") },
-                visualTransformation = underlinedDraft,
-                modifier = Modifier.fillMaxWidth().testTag("prescreen-draft"),
-                minLines = 5,
-                maxLines = 12,
+                modifier = Modifier.fillMaxWidth(),
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
