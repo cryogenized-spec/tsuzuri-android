@@ -82,6 +82,61 @@ class TsuzuriClipboardSecurityTest {
     }
 
     @Test
+    fun duplicateArchiveReferencesShareOneRestoredMediaFile() = runBlocking {
+        val sourceDir = FsFile(context.cacheDir, "tsuzuri-duplicate-test-" + System.nanoTime())
+        val folder = sourceDir.subDir(ClipboardFileStorage.CLIPBOARD_FILES_PATH)
+        folder.mkdirs()
+        val id = (System.nanoTime() and Long.MAX_VALUE).coerceAtLeast(1L)
+        folder.subFile(id.toString()).writeText("shared-media-test")
+        var copied: List<ClipboardItem> = emptyList()
+        try {
+            copied = ClipboardBackupMediaImporter.prepare(
+                context, sourceDir, oldPackage, 127,
+                listOf(
+                    oldImage(id),
+                    oldImage(id).copy(creationTimestampMs = System.currentTimeMillis() + 1),
+                ),
+                ItemType.IMAGE,
+            )
+            assertEquals(2, copied.size)
+            assertEquals(copied[0].uri, copied[1].uri)
+            assertArrayEquals(
+                "shared-media-test".toByteArray(),
+                ClipboardFileStorage.getFileForId(
+                    context, ContentUris.parseId(requireNotNull(copied[0].uri)),
+                ).readBytes(),
+            )
+        } finally {
+            copied.firstOrNull()?.close(context)
+            sourceDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun hostileArchiveWithTooManyMediaRowsIsRejectedBeforeDiskCopy() {
+        val sourceDir = FsFile(context.cacheDir, "tsuzuri-cap-test-" + System.nanoTime())
+        val folder = sourceDir.subDir(ClipboardFileStorage.CLIPBOARD_FILES_PATH)
+        folder.mkdirs()
+        val sourceId = (System.nanoTime() and Long.MAX_VALUE).coerceAtLeast(1L)
+        folder.subFile(sourceId.toString()).writeText("same-image")
+        try {
+            val repeated = List(1000) { oldImage(sourceId) }
+            val result = runCatching {
+                ClipboardBackupMediaImporter.validate(
+                    sourceDir, oldPackage, 127, repeated, ItemType.IMAGE,
+                )
+            }
+            assertTrue(result.isFailure)
+            assertEquals(
+                "same-image",
+                folder.subFile(sourceId.toString()).readText(),
+            )
+        } finally {
+            sourceDir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun sensitiveLegacyImagesAreNotImportedOrPersisted() = runBlocking {
         val sourceDir = FsFile(context.cacheDir, "tsuzuri-sensitive-test-" + System.nanoTime())
         val archiveFiles = sourceDir.subDir(ClipboardFileStorage.CLIPBOARD_FILES_PATH)
