@@ -15,7 +15,7 @@
 From this directory: `python3 -m http.server 8765`; open `http://localhost:8765`.
 
 ## Trust boundary
-No API keys/passwords are accepted or persisted. No outgoing network calls other than fetching an optional Google Fonts stylesheet and explicit user clicks on provider signup links. The simulator doesn't persist typed text or record speech; the keyboard itself operates without server access. The only permissions potentially requested are browser clipboard on user-selected long-press shortcuts, and browser PWA installation. The Google Fonts request is optional and should be removed if fully zero-third-party preview hosting is required.
+No API keys/passwords are accepted or persisted. No outgoing network calls other than fetching an optional Google Fonts stylesheet and explicit user clicks on provider signup links. The simulator doesn't persist typed text or record speech; the keyboard itself operates without server access. The preview does not use the real system clipboard or request microphone permissions. A browser may offer to install the PWA. External provider signup pages only open on an explicit user click; all site assets use system fonts without external font requests.
 
 ## Known gaps / native parity
 Many controls are representative rather than exact native Compose renderings. The 20 Unicode transformations in this *web prototype* are not present in the native Android PRs yet. Emoji shown in the sticker preview are NOT actual PNG stickers. Preview voice cleanup uses deterministic local JavaScript heuristics, not AI. No actual data is sent from the mock conversation. Device touch interaction and IME lifecycle behaviour must be tested separately.
