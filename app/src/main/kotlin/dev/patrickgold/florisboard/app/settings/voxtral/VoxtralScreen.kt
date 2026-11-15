@@ -66,6 +66,7 @@ import dev.patrickgold.florisboard.app.ui.OwnkeySheet
 import dev.patrickgold.florisboard.app.ui.OwnkeyTextField
 import dev.patrickgold.florisboard.app.ui.OwnkeyTone
 import dev.patrickgold.florisboard.ime.text.dictation.CloudTranscriptionPresets
+import dev.patrickgold.florisboard.ime.text.dictation.CloudVoiceProviderSwitcher
 import dev.patrickgold.florisboard.ime.text.dictation.TranscriptionBackend
 import dev.patrickgold.florisboard.ime.text.dictation.TranscriptionLanguageHints
 import dev.patrickgold.florisboard.ime.text.dictation.TranscriptionLanguageMode
@@ -134,6 +135,19 @@ fun VoxtralScreen() = FlorisScreen {
     content {
         val prefsRef = prefs
         val scope = rememberCoroutineScope()
+        val voiceSwitcher = remember {
+            CloudVoiceProviderSwitcher(
+                currentEndpoint = { prefsRef.voxtral.endpointUrl.get() },
+                durablyEraseKey = {
+                    withContext(Dispatchers.IO) {
+                        runCatching { voxtralSecretsStore.clearApiKeyDurably() }.getOrDefault(false)
+                    }
+                },
+                clearLegacyKey = { prefsRef.voxtral.apiKey.set("").getOrThrow() },
+                updateEndpoint = { prefsRef.voxtral.endpointUrl.set(it).getOrThrow() },
+                updateModel = { prefsRef.voxtral.model.set(it).getOrThrow() },
+            )
+        }
         val endpointUrl by prefsRef.voxtral.endpointUrl.collectAsState()
         val cloudModel by prefsRef.voxtral.model.collectAsState()
         val selectedBackend by prefsRef.voxtral.dictationBackend.collectAsState()
@@ -328,8 +342,10 @@ fun VoxtralScreen() = FlorisScreen {
                                 return@launch
                             }
                             val change = withContext(Dispatchers.IO) {
-                                val stored = runCatching { voxtralSecretsStore.setApiKey(key) }.isSuccess
-                                AiSettings.apiKeySaved(stored, readKey { voxtralSecretsStore.hasApiKey() })
+                                val saved = voiceSwitcher.editKeyForHost(endpointUrl) {
+                                    runCatching { voxtralSecretsStore.setApiKey(key) }.isSuccess
+                                }
+                                AiSettings.apiKeySaved(saved, readKey { voxtralSecretsStore.hasApiKey() })
                             }
                             hasCloudKey = change.hasKey
                             if (!change.succeeded) {
@@ -344,8 +360,10 @@ fun VoxtralScreen() = FlorisScreen {
                         scope.launch {
                             keyError = null
                             val change = withContext(Dispatchers.IO) {
-                                runCatching { voxtralSecretsStore.clearApiKey() }
-                                AiSettings.apiKeyRemoved(readKey { voxtralSecretsStore.hasApiKey() })
+                                val cleared = voiceSwitcher.editKeyForHost(endpointUrl) {
+                                    runCatching { voxtralSecretsStore.clearApiKeyDurably() }.getOrDefault(false)
+                                }
+                                AiSettings.apiKeyRemoved(cleared && !readKey { voxtralSecretsStore.hasApiKey() })
                             }
                             hasCloudKey = change.hasKey
                             if (!change.succeeded) {
@@ -359,7 +377,7 @@ fun VoxtralScreen() = FlorisScreen {
                     onDismiss = closePanel,
                     errorText = keyError,
                 ) {
-                    if (!cloudKey && cloudProvider == MistralProviderName) {
+                    if (!cloudKey && CloudTranscriptionPresets.setupUrlFor(endpointUrl) != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         OwnkeyButton(
                             label = "Open voice provider API-key setup",
@@ -367,7 +385,7 @@ fun VoxtralScreen() = FlorisScreen {
                                 CloudTranscriptionPresets.setupUrlFor(endpointUrl)?.let(context::openVoiceProviderLink)
                             },
                             style = OwnkeyButtonStyle.Plain,
-                            modifier = Modifier.testTag("ai-mistral-signup"),
+                            modifier = Modifier.testTag("ai-voice-signup"),
                         )
                     }
                 }
@@ -383,22 +401,15 @@ fun VoxtralScreen() = FlorisScreen {
                                 (cloudModel.ifBlank { VoxtralRelayTranscriptionClient.DefaultModel } == preset.model),
                             onClick = {
                                 scope.launch {
-                                    if (CloudTranscriptionPresets.mustClearApiKey(endpointUrl, preset.endpointUrl)) {
-                                        val cleared = withContext(Dispatchers.IO) {
-                                            runCatching {
-                                                voxtralSecretsStore.clearApiKey()
-                                                !voxtralSecretsStore.hasApiKey()
-                                            }.getOrDefault(false)
+                                    when (val result = voiceSwitcher.switchTo(preset.endpointUrl, preset.model)) {
+                                        is CloudVoiceProviderSwitcher.SwitchResult.Applied -> {
+                                            if (result.keyCleared) hasCloudKey = false
+                                            hide()
                                         }
-                                        if (!cleared) {
+                                        CloudVoiceProviderSwitcher.SwitchResult.KeyDeletionFailed -> {
                                             context.voiceProviderKeyClearFailed()
-                                            return@launch
                                         }
-                                        hasCloudKey = false
                                     }
-                                    prefsRef.voxtral.endpointUrl.set(preset.endpointUrl)
-                                    prefsRef.voxtral.model.set(preset.model)
-                                    hide()
                                 }
                             },
                             modifier = Modifier.testTag("ai-voice-preset-$index"),
@@ -434,23 +445,15 @@ fun VoxtralScreen() = FlorisScreen {
                     storedModel = cloudModel,
                     onSave = { address, model ->
                         scope.launch {
-                            if (CloudTranscriptionPresets.mustClearApiKey(endpointUrl, address)) {
-                                val cleared = withContext(Dispatchers.IO) {
-                                    runCatching {
-                                        voxtralSecretsStore.clearApiKey()
-                                        !voxtralSecretsStore.hasApiKey()
-                                    }.getOrDefault(false)
+                            when (val result = voiceSwitcher.switchTo(address, model)) {
+                                is CloudVoiceProviderSwitcher.SwitchResult.Applied -> {
+                                    if (result.keyCleared) hasCloudKey = false
+                                    closePanel()
                                 }
-                                if (!cleared) {
+                                CloudVoiceProviderSwitcher.SwitchResult.KeyDeletionFailed ->
                                     context.voiceProviderKeyClearFailed()
-                                    return@launch
-                                }
-                                hasCloudKey = false
                             }
-                            prefsRef.voxtral.endpointUrl.set(address)
-                            prefsRef.voxtral.model.set(model)
                         }
-                        closePanel()
                     },
                     onDismiss = closePanel,
                 )
