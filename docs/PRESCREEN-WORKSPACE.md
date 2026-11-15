@@ -9,7 +9,10 @@ Do not merge into main until strict CI, Android instrumentation, and privacy rev
 Normal Android IME typing remains the default. The pre-screen is an optional,
 native Compose draft workspace accessible through Home in this first slice.
 It does not use an embedded browser or execute untrusted HTML or JavaScript.
-A source draft is retained in Compose memory for the current screen only.
+A source draft is retained in a navigation-entry-scoped ViewModel in memory,
+surviving rotation and an AI-settings round-trip without disk persistence.
+Popping the destination clears it; Android process death intentionally does
+not restore private drafts.
 
 The user can manually paste a draft, format the active selection or the word
 under the cursor, invoke an already-configured BYOK rewrite provider, review
@@ -37,7 +40,8 @@ is a later integration gate, not silently claimed as part of this milestone.
    change-grouping is future work.
 6. **Approve** adopts proposed text into the local draft. **Reject**
    discards the proposal. Neither action sends a message.
-7. After approval, **Copy approved text** allows manual pasting into
+7. **Copy current draft** also exports manual formatting without AI.
+   After approval, **Copy approved text** allows manual pasting into
    another app. Choosing any model-suggested edit invokes another **explicit**
    paid provider request and maintains the original draft until approval.
 
