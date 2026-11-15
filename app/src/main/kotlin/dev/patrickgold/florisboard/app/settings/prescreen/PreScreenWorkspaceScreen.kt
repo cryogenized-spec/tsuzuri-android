@@ -254,6 +254,7 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
                         Color((0xFF000000L or rgb).toInt())
                     } else Color(0xFF43A047)
                 }
+                val removedColour = MaterialTheme.colorScheme.error
                 Text(
                     buildAnnotatedString {
                         difference.forEach { segment ->
@@ -267,7 +268,7 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
                                 PreScreenDiffKind.REMOVED -> {
                                     pushStyle(
                                         SpanStyle(
-                                            color = MaterialTheme.colorScheme.error,
+                                            color = removedColour,
                                             textDecoration = TextDecoration.LineThrough,
                                         ),
                                     )
