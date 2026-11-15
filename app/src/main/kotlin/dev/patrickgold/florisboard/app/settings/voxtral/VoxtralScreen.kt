@@ -65,6 +65,7 @@ import dev.patrickgold.florisboard.app.ui.OwnkeyRow
 import dev.patrickgold.florisboard.app.ui.OwnkeySheet
 import dev.patrickgold.florisboard.app.ui.OwnkeyTextField
 import dev.patrickgold.florisboard.app.ui.OwnkeyTone
+import dev.patrickgold.florisboard.ime.text.dictation.CloudTranscriptionPresets
 import dev.patrickgold.florisboard.ime.text.dictation.TranscriptionBackend
 import dev.patrickgold.florisboard.ime.text.dictation.TranscriptionLanguageHints
 import dev.patrickgold.florisboard.ime.text.dictation.TranscriptionLanguageMode
@@ -91,7 +92,7 @@ import org.florisboard.lib.compose.pluralsRes
 import org.florisboard.lib.compose.stringRes
 
 /** Dialogs and sheets of the AI screen; at most one is open. */
-private enum class AiPanel { CloudKey, CloudProvider, Language, RewriteProvider, RewriteKey, RewriteModel, RewriteServer }
+private enum class AiPanel { CloudKey, CloudProvider, VoicePresets, Language, RewriteProvider, RewriteKey, RewriteModel, RewriteServer }
 
 @Composable
 fun VoxtralScreen() = FlorisScreen {
@@ -242,6 +243,13 @@ fun VoxtralScreen() = FlorisScreen {
                     onClick = { panel = AiPanel.CloudProvider },
                     modifier = Modifier.testTag("ai-cloud-provider"),
                 )
+                OwnkeyRow(
+                    title = "Recommended speech providers",
+                    value = "Choose a model and open its setup website",
+                    chevron = true,
+                    onClick = { panel = AiPanel.VoicePresets },
+                    modifier = Modifier.testTag("ai-voice-provider-presets"),
+                )
             }
 
             OwnkeyGroup(
@@ -354,10 +362,70 @@ fun VoxtralScreen() = FlorisScreen {
                     if (!cloudKey && cloudProvider == MistralProviderName) {
                         Spacer(modifier = Modifier.height(8.dp))
                         OwnkeyButton(
-                            label = stringRes(R.string.settings__ai__cloud_key__signup),
-                            onClick = { context.launchUrl(R.string.voxtral__mistral_signup_url) },
+                            label = "Open voice provider API-key setup",
+                            onClick = {
+                                CloudTranscriptionPresets.setupUrlFor(endpointUrl)?.let(context::openVoiceProviderLink)
+                            },
                             style = OwnkeyButtonStyle.Plain,
                             modifier = Modifier.testTag("ai-mistral-signup"),
+                        )
+                    }
+                }
+                AiPanel.VoicePresets -> OwnkeySheet(
+                    onDismiss = closePanel,
+                    title = "Speech providers — BYOK",
+                ) { hide ->
+                    itemsIndexed(CloudTranscriptionPresets.presets) { index, preset ->
+                        OwnkeyChoiceRow(
+                            label = preset.name,
+                            summary = preset.description,
+                            selected = (endpointUrl.ifBlank { VoxtralRelayTranscriptionClient.DefaultEndpointUrl } == preset.endpointUrl) &&
+                                (cloudModel.ifBlank { VoxtralRelayTranscriptionClient.DefaultModel } == preset.model),
+                            onClick = {
+                                scope.launch {
+                                    if (CloudTranscriptionPresets.mustClearApiKey(endpointUrl, preset.endpointUrl)) {
+                                        val cleared = withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                voxtralSecretsStore.clearApiKey()
+                                                !voxtralSecretsStore.hasApiKey()
+                                            }.getOrDefault(false)
+                                        }
+                                        if (!cleared) {
+                                            context.voiceProviderKeyClearFailed()
+                                            return@launch
+                                        }
+                                        hasCloudKey = false
+                                    }
+                                    prefsRef.voxtral.endpointUrl.set(preset.endpointUrl)
+                                    prefsRef.voxtral.model.set(preset.model)
+                                    hide()
+                                }
+                            },
+                            modifier = Modifier.testTag("ai-voice-preset-$index"),
+                        )
+                        OwnkeyButton(
+                            label = "Get API key / sign up: " + preset.name,
+                            onClick = { context.openVoiceProviderLink(preset.setupUrl) },
+                            style = OwnkeyButtonStyle.Plain,
+                            modifier = Modifier.testTag("ai-voice-provider-link-$index"),
+                        )
+                    }
+                    item {
+                        OwnkeyNotice(text = "Google Cloud Speech-to-Text V1 has 60 free minutes/month, but still requires billing and Google Cloud credentials. Direct Google Cloud transcription is not yet implemented; use Android system voice input for a no-separate-API-key option.")
+                        OwnkeyButton(
+                            label = "Google Cloud setup (opens browser)",
+                            onClick = { context.openVoiceProviderLink(CloudTranscriptionPresets.GOOGLE_CLOUD_SETUP) },
+                            style = OwnkeyButtonStyle.Plain,
+                        )
+                        OwnkeyButton(
+                            label = "Google Cloud pricing",
+                            onClick = { context.openVoiceProviderLink(CloudTranscriptionPresets.GOOGLE_CLOUD_PRICING) },
+                            style = OwnkeyButtonStyle.Plain,
+                        )
+                        OwnkeyButton(
+                            label = "OpenAI realtime voice transcription — future integration",
+                            onClick = { context.openVoiceProviderLink(CloudTranscriptionPresets.OPENAI_LIVE_GUIDE) },
+                            style = OwnkeyButtonStyle.Plain,
                         )
                     }
                 }
@@ -366,6 +434,19 @@ fun VoxtralScreen() = FlorisScreen {
                     storedModel = cloudModel,
                     onSave = { address, model ->
                         scope.launch {
+                            if (CloudTranscriptionPresets.mustClearApiKey(endpointUrl, address)) {
+                                val cleared = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        voxtralSecretsStore.clearApiKey()
+                                        !voxtralSecretsStore.hasApiKey()
+                                    }.getOrDefault(false)
+                                }
+                                if (!cleared) {
+                                    context.voiceProviderKeyClearFailed()
+                                    return@launch
+                                }
+                                hasCloudKey = false
+                            }
                             prefsRef.voxtral.endpointUrl.set(address)
                             prefsRef.voxtral.model.set(model)
                         }
@@ -702,4 +783,18 @@ private fun LanguageSheet(
             }
         }
     }
+}
+
+/** Opens only fixed HTTPS provider documentation and account links. */
+private fun Context.openVoiceProviderLink(url: String) {
+    val uri = Uri.parse(url)
+    if (uri.scheme != "https") return
+    runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+}
+
+private fun Context.voiceProviderKeyClearFailed() {
+    android.widget.Toast.makeText(
+        this, "Unable to remove the previous provider key; provider was not changed.",
+        android.widget.Toast.LENGTH_LONG,
+    ).show()
 }
