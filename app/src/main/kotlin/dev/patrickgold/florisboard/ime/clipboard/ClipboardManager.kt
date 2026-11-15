@@ -348,10 +348,28 @@ class ClipboardManager(
                         val expired = currentUnpinned.drop(prefs.clipboard.historySizeLimit.get())
                         if (expired.isNotEmpty()) {
                             db.runInTransaction { dao.delete(expired) }
-                            expired.forEach { it.close(appContext) }
+                            disposeUnreferencedHistoryMedia(expired, db)
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Release media only when no surviving history row or primary clipboard
+     * item still refers to the same provider URI. Caller must hold
+     * historyMutationMutex to prevent a write between check and deletion.
+     */
+    private fun disposeUnreferencedHistoryMedia(
+        removed: Collection<ClipboardItem>,
+        db: ClipboardHistoryDatabase,
+    ) {
+        val survivors = db.clipboardItemDao().getAll().mapNotNull { it.uri?.toString() }.toSet()
+        val active = primaryClip?.uri?.toString()
+        for (item in removed.distinctBy { it.uri?.toString() ?: "row:" + it.id }) {
+            if (ClipboardMediaRetentionPolicy.mayDispose(item.uri?.toString(), survivors, active)) {
+                item.close(appContext)
             }
         }
     }
@@ -377,7 +395,7 @@ class ClipboardManager(
             }
             if (eligible.isEmpty()) return@withLock false
             db.runInTransaction { dao.delete(eligible) }
-            eligible.forEach { it.close(appContext) }
+            disposeUnreferencedHistoryMedia(eligible, db)
             true
         }
     }
@@ -421,7 +439,7 @@ class ClipboardManager(
                     if (existing.isNotEmpty()) dao.delete(existing)
                     existing
                 }
-                removed.forEach { it.close(appContext) }
+                disposeUnreferencedHistoryMedia(removed, db)
             }
         }
     }
@@ -439,7 +457,7 @@ class ClipboardManager(
                     dao.deleteAllUnpinned()
                     old
                 }
-                removed.forEach { it.close(appContext) }
+                disposeUnreferencedHistoryMedia(removed, db)
             }
         }
     }
@@ -492,7 +510,7 @@ class ClipboardManager(
                     dao.deleteAll()
                     old
                 }
-                oldItems.forEach { it.close(appContext) }
+                disposeUnreferencedHistoryMedia(oldItems, db)
             }
         }
     }
@@ -516,7 +534,7 @@ class ClipboardManager(
                     }
                 }
                 // Only delete media if a database row was actually removed.
-                deleted?.close(appContext)
+                deleted?.let { disposeUnreferencedHistoryMedia(listOf(it), db) }
                 deleted != null
             }
         }
