@@ -11,7 +11,6 @@ import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.net.Uri
-import android.content.ClipDescription
 import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
 import dev.patrickgold.florisboard.BuildConfig
@@ -98,6 +97,7 @@ internal object StickerStore {
     fun packs(): List<StickerPack> = snapshot.packs
     fun stickers(packId: String): List<StickerEntry> = snapshot.entries.filter { it.packId == packId }
     fun count(): Int = snapshot.entries.size
+    fun find(id: String): StickerEntry? = snapshot.entries.firstOrNull { it.id == id }
 
     private fun load(context: Context) {
         if (loaded) return
