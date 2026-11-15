@@ -105,7 +105,7 @@
       $$('[data-viewport]').forEach(v=>v.classList.toggle('selected',v===x));fitLandscapeDevice();renderKeyboard();
     }));
     document.addEventListener('click',e=>{const t=e.target.closest('[data-theme]');if(t)applyTheme(t.dataset.theme);});
-    $('.tool').forEach(x=>x.addEventListener('click',()=>setTool(x.dataset.tool)));
+    $$('.tool').forEach(x=>x.addEventListener('click',()=>setTool(x.dataset.tool)));
     $('#toggleNativeKeyboard').addEventListener('click',()=>{
       const enabled=draft.getAttribute('inputmode')==='text';
       draft.setAttribute('inputmode',enabled?'none':'text');
