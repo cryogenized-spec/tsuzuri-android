@@ -445,10 +445,24 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      * explicitly advertise support through Android's EditorInfo MIME types.
      * No text, network call or clipboard fallback is performed implicitly.
      */
+    fun canUseStickerMedia(): Boolean {
+        val attributes = activeInfo.inputAttributes
+        return activeInputSessionId != 0L &&
+            attributes.type == InputAttributes.Type.TEXT &&
+            attributes.variation !in setOf(
+                InputAttributes.Variation.PASSWORD,
+                InputAttributes.Variation.VISIBLE_PASSWORD,
+                InputAttributes.Variation.WEB_PASSWORD,
+                InputAttributes.Variation.EMAIL_ADDRESS,
+                InputAttributes.Variation.WEB_EMAIL_ADDRESS,
+                InputAttributes.Variation.URI,
+            ) &&
+            activeState.keyVariation == KeyVariation.NORMAL &&
+            !activeInfo.isRawInputEditor
+    }
+
     fun commitSticker(id: String): Boolean {
-        if (activeInputSessionId == 0L ||
-            activeState.keyVariation != KeyVariation.NORMAL ||
-            activeInfo.isRawInputEditor) return false
+        if (!canUseStickerMedia()) return false
         val item = StickerStore.find(id) ?: return false
         val contentUri = try {
             StickerStore.uriFor(appContext, item)
