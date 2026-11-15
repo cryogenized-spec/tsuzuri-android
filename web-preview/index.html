@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d12">
+  <meta name="description" content="Interactive browser preview of the Tsuzuri Android keyboard. Design simulator only; no native IME, microphone or cloud access.">
+  <meta name="color-scheme" content="dark light">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="./icon.svg">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Tsuzuri — Keyboard Preview</title>
+</head>
+<body>
+<div class="shell">
+  <aside class="nav-side">
+    <a class="brand" href="#keyboard" aria-label="Tsuzuri preview home">
+      <span class="brand-seal">綴</span>
+      <span><strong>TSUZURI</strong><small>INTERFACE / ANDROID</small></span>
+    </a>
+    <div class="nav-section">WORKSPACE</div>
+    <nav class="side-tabs" aria-label="Preview sections">
+      <button class="side-tab current" type="button" data-view="keyboard"><span>⌨</span> Keyboard <small>01</small></button>
+      <button class="side-tab" type="button" data-view="appearance"><span>◈</span> Appearance <small>02</small></button>
+      <button class="side-tab" type="button" data-view="voice"><span>◉</span> Voice &amp; AI <small>03</small></button>
+      <button class="side-tab" type="button" data-view="about"><span>≡</span> Beta notes <small>04</small></button>
+    </nav>
+    <div class="side-bottom">
+      <div class="build-id">WEB LAB <span>0.1</span></div>
+      <p>A tactile UI study of the keyboard, not the Android app itself.</p>
+      <a href="https://github.com/cryogenized-spec/tsuzuri-android/pull/1" target="_blank" rel="noopener noreferrer">View Android development ↗</a>
+    </div>
+  </aside>
+
+  <main class="workspace">
+    <header class="topbar">
+      <div class="topbar-left"><span class="eyebrow">INTERACTIVE PREVIEW</span><h1 id="page-title">Keyboard laboratory</h1></div>
+      <div class="topbar-right">
+        <span class="status-dot" aria-hidden="true"></span><span class="status-label">LOCAL DEMO</span>
+        <button type="button" class="soft-button" id="installBtn" hidden>Install preview</button>
+      </div>
+    </header>
+    <nav class="mobile-tabs" aria-label="Sections">
+      <button data-view="keyboard" class="active">Keyboard</button>
+      <button data-view="appearance">Appearance</button>
+      <button data-view="voice">Voice &amp; AI</button>
+      <button data-view="about">Beta notes</button>
+    </nav>
+
+    <section class="view active" id="view-keyboard" aria-label="Keyboard preview">
+      <div class="control-line">
+        <div><span class="eyebrow">DEVICE</span><span class="small-note">Try the keyboard keys and tools below</span></div>
+        <div class="device-toggles" role="group" aria-label="Device format">
+          <button class="selected" data-viewport="portrait">9:16</button>
+          <button data-viewport="compact">Compact</button>
+          <button data-viewport="landscape">Landscape</button>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div id="device" class="device portrait">
+          <div class="device-surface" id="deviceSurface">
+            <div class="phone-status"><span>9:41</span><span>●●● ▰</span></div>
+            <div class="app-chatbar"><span class="back-symbol">‹</span><span class="avatar">S</span><div><strong>Sample conversation</strong><small>On-device typing sandbox</small></div><span class="chatmore">•••</span></div>
+            <div class="messages" id="messages">
+              <div class="day-label">TODAY</div>
+              <div class="bubble incoming">Would you be able to send through the plan for tomorrow?</div>
+              <div class="bubble outgoing">Sure — I’ll put something together.</div>
+            </div>
+            <div class="composer-row">
+              <button type="button" class="composer-action" id="clearComposer" aria-label="Clear draft">＋</button>
+              <textarea id="draft" rows="1" spellcheck="false" inputmode="none" placeholder="Write a message…" aria-label="Mock message draft"></textarea>
+              <button type="button" class="composer-action" id="toggleNativeKeyboard" aria-label="Enable phone system keyboard for editing" aria-pressed="false" title="Enable the phone keyboard explicitly">⌨</button>
+              <button type="button" id="sendDemo" class="send" aria-label="Send to simulated conversation">↑</button>
+            </div>
+            <div class="keyboard-ui" id="keyboardUi">
+              <div class="toolstrip">
+                <button class="tool active" type="button" data-tool="type">ABC</button>
+                <button class="tool" type="button" data-tool="symbols">✳ Symbols</button>
+                <button class="tool" type="button" data-tool="stickers">✿ Stickers</button>
+                <button class="tool" type="button" data-tool="voice">● Voice</button>
+                <button class="tool" type="button" data-tool="styles">ℱ Styles</button>
+                <button class="tool" type="button" data-tool="prescreen">▤ Pre-screen</button>
+              </div>
+              <div class="keyboard-content" id="keyboardContent" aria-live="polite"></div>
+            </div>
+            <div class="phone-bottom"><div class="gesture-bar"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="under-stage"><span>⌘</span> All typing stays in this browser preview. Sending adds a mock chat bubble only; nothing reaches WhatsApp or another app.</div>
+    </section>
+
+    <section class="view" id="view-appearance" aria-label="Keyboard appearance">
+      <div class="section-lead"><span class="eyebrow">CUSTOMISATION</span><h2>Set the tone.</h2><p>Explore color, key shape and layout density. These controls affect the preview; Android parity is still under test.</p></div>
+      <div class="settings-card"><h3>Color environment</h3><p>Choose a starting palette.</p><div id="themeOptions" class="theme-grid"></div></div>
+      <div class="settings-card"><h3>Keyboard geometry</h3>
+        <div class="option-row"><div><strong>Number row</strong><small>Show digits above letters</small></div><label class="switch"><input id="numberRow" type="checkbox" aria-label="Show number row"><span></span></label></div>
+        <div class="option-row"><div><strong>Rounded keycaps</strong><small>Switch between soft and square edges</small></div><label class="switch"><input id="roundKeys" type="checkbox" aria-label="Rounded keycaps" checked><span></span></label></div>
+        <div class="option-row"><div><strong>One-handed keyboard</strong><small>Narrow the keys toward the right edge</small></div><label class="switch"><input id="oneHanded" type="checkbox" aria-label="One-handed keyboard"><span></span></label></div>
+        <div class="option-row"><div><strong>Keyboard letters</strong><small>Visual keyboard row order</small></div><select id="layoutChoice" aria-label="Keyboard layout"><option value="qwerty">QWERTY</option><option value="azerty">AZERTY</option><option value="qwertz">QWERTZ</option></select></div>
+        <div class="option-row"><div><strong>Accent colour</strong><small>Used for highlights and selected controls</small></div><input id="accentColor" type="color" value="#a78bfa" aria-label="Accent colour"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-voice" aria-label="Voice transcription settings">
+      <div class="section-lead"><span class="eyebrow">VOICE INPUT</span><h2>Speak. Refine. Insert.</h2><p>This is a configuration and flow preview. Browser microphone and external AI requests are deliberately disabled.</p></div>
+      <div class="settings-card"><h3>Transcription provider</h3><p>These links open providers in your browser. No API keys are accepted by this demonstration.</p><div class="provider-list" id="providerList"></div></div>
+      <div class="settings-card"><h3>Automatic cleanup</h3><p>Choose what happens after a completed voice transcript.</p><div class="cleanup-modes" id="cleanupModes"></div>
+      <div class="voice-sample"><label for="voiceSample">Example spoken thought</label><textarea id="voiceSample">Um, ja, I need to go to the mall tomorrow and, uh, pay my account, buy groceries, and then I'll probably get a taxi home.</textarea><button class="primary" id="demoClean" type="button">Preview cleanup</button><div class="voice-result" id="voiceResult" aria-live="polite"></div></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-about" aria-label="Beta notes">
+      <div class="section-lead"><span class="eyebrow">RELEASE TRACKING</span><h2>What this preview can prove.</h2><p>Useful for layout, discoverability, typing ergonomics and feature direction. Not a substitute for Android device tests.</p></div>
+      <div class="settings-card">
+        <h3>Previewed interactions</h3><p>QWERTY-style touch entry, deletion, shift and symbols, emoji-like sticker gallery, Unicode-style experiments, dummy voice cleanup, and an editable Pre-screen draft with approval.</p>
+        <h3 class="subheading">Not exercised here</h3><p>Android IME permissions and lifecycle, real predictions and autocorrect, native sticker MIME insertion, Groq or OpenAI network transcription, provider key security, OS clipboard, voice capture, APK packaging and backup/restore.</p>
+      </div>
+      <div class="settings-card"><h3>Engineering checkpoints</h3>
+        <div class="milestone"><strong>Foundation + clipboard</strong><span class="review">Needs security fixes and Android tests</span></div>
+        <div class="milestone"><strong>Keyboard customisation + Pre-screen + stickers</strong><span class="merged">Integrated in development</span></div>
+        <div class="milestone"><strong>Groq BYOK + AI cleanup</strong><span class="review">Draft PRs #6 and #7</span></div>
+        <div class="milestone"><strong>Signed Android beta</strong><span class="review">Not yet released</span></div>
+      </div>
+      <div class="settings-card"><h3>Source and feedback</h3><p>The simulator is intentionally isolated from the Android build. Compare ideas against the device before considering UI parity complete.</p>
+        <a class="external-link" href="https://github.com/cryogenized-spec/tsuzuri-android" target="_blank" rel="noopener noreferrer">Tsuzuri source repository ↗</a>
+      </div>
+    </section>
+  </main>
+
+  <aside class="inspector">
+    <div class="inspect-header"><span class="eyebrow">LIVE CONTROLS</span><span>↗</span></div>
+    <h2>Keyboard properties</h2>
+    <p class="muted">Adjust these without leaving the phone view.</p>
+    <div class="inspect-label">APPEARANCE</div>
+    <div class="inspector-swatch" id="inspectorThemes"></div>
+    <div class="inspect-label">INPUT LAYOUT</div>
+    <div class="inspector-field"><label for="quickLayout">Layout</label><select id="quickLayout"><option value="qwerty">QWERTY</option><option value="azerty">AZERTY</option><option value="qwertz">QWERTZ</option></select></div>
+    <div class="inspector-field"><label for="fontSize">Key label scale <output id="fontSizeOut">100%</output></label><input type="range" id="fontSize" min="85" max="120" value="100" step="5"></div>
+    <div class="inspect-label">OPTIONAL TOOLS</div>
+    <button class="inspect-link" type="button" data-jump="voice">Voice providers <span>›</span></button>
+    <button class="inspect-link" type="button" data-jump="about">Beta checklist <span>›</span></button>
+    <div class="inspector-warning"><strong>Development preview</strong><p>Illustrative interface. No microphone, AI account, API key or background service is used.</p></div>
+  </aside>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="./app.js" defer></script>
+</body>
+</html>
