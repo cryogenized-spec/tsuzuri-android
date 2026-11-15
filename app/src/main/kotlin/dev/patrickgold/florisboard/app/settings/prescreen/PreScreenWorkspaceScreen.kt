@@ -39,9 +39,16 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import dev.patrickgold.florisboard.app.Routes
+import dev.patrickgold.florisboard.ime.dictionary.DictionaryManager
+import dev.patrickgold.florisboard.ime.dictionary.UserDictionaryEntry
+import dev.patrickgold.florisboard.nlpManager
+import dev.patrickgold.florisboard.subtypeManager
 import dev.patrickgold.florisboard.app.LocalNavController
 import dev.patrickgold.florisboard.ime.text.prescreen.PreScreenAction
 import dev.patrickgold.florisboard.ime.text.prescreen.PreScreenContract
@@ -58,6 +65,7 @@ import dev.patrickgold.florisboard.ime.text.rewrite.LlmRewriteSecretsStore
 import dev.patrickgold.florisboard.lib.compose.FlorisScreen
 import dev.patrickgold.jetpref.datastore.model.collectAsState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -76,6 +84,8 @@ fun PreScreenWorkspaceScreen(workspace: PreScreenWorkspaceState) = FlorisScreen 
 
     val context = LocalContext.current
     val nav = LocalNavController.current
+    val nlpManager by context.nlpManager()
+    val subtypeManager by context.subtypeManager()
     content {
         val prefsRef = prefs
         val scope = rememberCoroutineScope()
@@ -83,6 +93,7 @@ fun PreScreenWorkspaceScreen(workspace: PreScreenWorkspaceState) = FlorisScreen 
         val learnEnabled by prefsRef.preScreen.learningEnabled.collectAsState()
         val learnedKinds by prefsRef.preScreen.learnedKinds.collectAsState()
         val colorStored by prefsRef.preScreen.diffColor.collectAsState()
+        val spellingEnabled by prefsRef.preScreen.manualSpellingEnabled.collectAsState()
         val count = countStored.coerceIn(PreScreenContract.MIN_SUGGESTIONS, PreScreenContract.MAX_SUGGESTIONS)
         var colourInput by remember { mutableStateOf(colorStored) }
         LaunchedEffect(colorStored) { colourInput = colorStored }
@@ -101,6 +112,83 @@ fun PreScreenWorkspaceScreen(workspace: PreScreenWorkspaceState) = FlorisScreen 
         var activeJob by workspace.activeJob
         var requestGeneration by workspace.requestGeneration
         var feedback by workspace.feedback
+        var checkedDraft by remember { mutableStateOf("") }
+        var spellingIssues by remember { mutableStateOf(emptyList<PreScreenSpellingIssue>()) }
+        var ignoredSpelling by remember { mutableStateOf(emptySet<Pair<Int, String>>()) }
+
+        // Spellcheck only on-device, after a pause and only for committed words.
+        // The work is cancelled when text changes; results from old drafts are ignored.
+        LaunchedEffect(draft.text, spellingEnabled) {
+            val source = draft.text
+            spellingIssues = emptyList()
+            checkedDraft = ""
+            if (!spellingEnabled || source.isEmpty()) return@LaunchedEffect
+            delay(280L)
+            val words = PreScreenWordScanner.completed(source)
+            val subtype = subtypeManager.activeSubtype
+            val checked = withContext(Dispatchers.Default) {
+                val cache = mutableMapOf<String, List<String>>()
+                buildList {
+                    for (word in words) {
+                        val suggestions = cache.getOrPut(word.text) {
+                            // Temporary sentinel; source text and API errors are never logged.
+                            emptyList()
+                        }
+                        val ranked = if (word.text in cache && suggestions.isNotEmpty()) {
+                            suggestions
+                        } else {
+                            val fromProvider = try {
+                                val result = nlpManager.spell(
+                                    subtype = subtype,
+                                    word = word.text,
+                                    precedingWords = emptyList(),
+                                    followingWords = emptyList(),
+                                    maxSuggestionCount = 5,
+                                )
+                                if (result.isTypo) result.suggestions().toList()
+                                    .filter { it.isNotBlank() && it != word.text }
+                                    .distinct().take(5)
+                                else emptyList()
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
+                            cache[word.text] = fromProvider
+                            fromProvider
+                        }
+                        if (ranked.isNotEmpty()) add(PreScreenSpellingIssue(word, ranked))
+                    }
+                }
+            }
+            if (draft.text == source) {
+                checkedDraft = source
+                spellingIssues = checked
+            }
+        }
+
+        val activeSpelling = if (checkedDraft == draft.text && spellingEnabled) {
+            spellingIssues.filterNot { (it.word.start to it.word.text) in ignoredSpelling }
+        } else emptyList()
+        val underlinedDraft = remember(draft.text, activeSpelling) {
+            VisualTransformation { original ->
+                val annotated = buildAnnotatedString {
+                    append(original)
+                    for (issue in activeSpelling) {
+                        if (issue.word.end <= original.length) {
+                            addStyle(
+                                SpanStyle(
+                                    color = Color(0xFFCF2E2E),
+                                    textDecoration = TextDecoration.Underline,
+                                ),
+                                issue.word.start, issue.word.end,
+                            )
+                        }
+                    }
+                }
+                TransformedText(annotated, OffsetMapping.Identity)
+            }
+        }
 
         fun requestEdit(editInstruction: String, category: PreScreenKind? = null) {
             if (busy || editInstruction.isBlank()) return
@@ -186,15 +274,108 @@ fun PreScreenWorkspaceScreen(workspace: PreScreenWorkspaceState) = FlorisScreen 
                             proposalSource = null
                             selectedCategory = null
                             approvedText = null
+                            ignoredSpelling = emptySet()
                         }
                         draft = updated
                     }
                 },
                 label = { Text("Local draft / paste text") },
+                visualTransformation = underlinedDraft,
                 modifier = Modifier.fillMaxWidth().testTag("prescreen-draft"),
                 minLines = 5,
                 maxLines = 12,
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Offline spelling review", modifier = Modifier.weight(1f))
+                Switch(
+                    checked = spellingEnabled,
+                    onCheckedChange = { enabled ->
+                        scope.launch { prefsRef.preScreen.manualSpellingEnabled.set(enabled) }
+                    },
+                )
+            }
+            val currentMisspelling = activeSpelling.firstOrNull {
+                PreScreenWordScanner.canReplace(
+                    draft.text, it.word, draft.selection.start, draft.selection.end,
+                )
+            }
+            if (currentMisspelling != null && draft.selection.collapsed) {
+                val word = currentMisspelling.word
+                Text(
+                    "Spelling suggestions for ‘${word.text}’",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                for (suggestion in currentMisspelling.suggestions) {
+                    OutlinedButton(
+                        onClick = {
+                            // The field can change even while a popup is visible.
+                            if (PreScreenWordScanner.canReplace(
+                                    draft.text, word, draft.selection.start, draft.selection.end,
+                                )
+                            ) {
+                                val replaced = draft.text.replaceRange(word.start, word.end, suggestion)
+                                draft = TextFieldValue(
+                                    replaced,
+                                    selection = TextRange(word.start + suggestion.length),
+                                )
+                                proposal = null
+                                proposalSource = null
+                                approvedText = null
+                                requestGeneration += 1
+                                activeJob?.cancel()
+                                activeJob = null
+                                busy = false
+                                ignoredSpelling = emptySet()
+                                feedback = "Replaced ‘${word.text}’ with ‘$suggestion’."
+                            } else {
+                                feedback = "The word moved; no correction was applied."
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("prescreen-correction"),
+                    ) { Text(suggestion) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        ignoredSpelling = ignoredSpelling + (word.start to word.text)
+                        feedback = "Kept ‘${word.text}’ in this draft."
+                    }) { Text("Ignore once") }
+                    TextButton(onClick = {
+                        if (PreScreenWordScanner.canReplace(
+                                draft.text, word, draft.selection.start, draft.selection.end,
+                            )
+                        ) {
+                            scope.launch {
+                                val stored = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        val manager = DictionaryManager.default()
+                                        manager.loadUserDictionariesIfNecessary()
+                                        val dao = manager.florisUserDictionaryDao()
+                                            ?: return@runCatching false
+                                        if (dao.queryExact(word.text).isEmpty()) {
+                                            dao.insert(
+                                                UserDictionaryEntry(
+                                                    id = 0L, word = word.text, freq = 255,
+                                                    locale = null, shortcut = null,
+                                                ),
+                                            )
+                                        }
+                                        true
+                                    }.getOrDefault(false)
+                                }
+                                if (stored) {
+                                    ignoredSpelling = ignoredSpelling + (word.start to word.text)
+                                    feedback = "Added ‘${word.text}’ to your local dictionary."
+                                } else {
+                                    feedback = "Could not save the word; check user dictionary settings."
+                                }
+                            }
+                        }
+                    }) { Text("Add to dictionary") }
+                }
+            }
             OutlinedButton(
                 onClick = {
                     (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
