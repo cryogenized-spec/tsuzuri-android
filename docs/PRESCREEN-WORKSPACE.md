@@ -106,6 +106,16 @@ not guarantee interpretation of HTML/Markdown by apps such as Notion,
 Obsidian, or WhatsApp. "Convert the font" is reserved as a controlled,
 previewable typography action, not unrestricted Unicode mutation.
 
+## Offline spelling review (new milestone)
+
+The local Pre-screen draft now reuses the on-device spelling engine with a
+bounded, debounced list of completed words. Misspellings receive a custom
+Compose red zigzag underline; tapping a flagged word exposes ranked local
+corrections, Ignore once and Add to dictionary. Changes require the current
+word and cursor to match the source snapshot. This feature has not yet been
+validated on an Android device; arbitrary host-app spelling underlines and
+native popups remain editor-specific.
+
 ## Host editor transfer (blocking follow-up)
 
 Before introducing a keyboard-toolbar shortcut that transfers results back to
