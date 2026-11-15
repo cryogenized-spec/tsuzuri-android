@@ -22,3 +22,7 @@ A future follow-up PR can handoff both raw and cleaned text to the temporary Pre
 - Device: Groq end-to-end recorded dictation + optional rewrite, host switch during cleanup, key-not-configured fallback, no automatic sending.
 - Security: no transcript or audio persisted by cleanup layer, no text-based provider keys exported to the clipboard, and no developer-owned relay.
 
+
+## Dependency reconciliation
+
+The current branch includes PR #6's shared transcription/provider credential snapshot guard and durable key deletion; do not regress them when adding cleanup. This stacked change remains a draft pending compile/review/device verification.
