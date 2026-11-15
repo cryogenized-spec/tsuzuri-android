@@ -559,18 +559,18 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      * @return True on success, false if an error occurred or the input connection is invalid.
      */
     fun performClipboardCut(): Boolean {
+        // A long-press popup may outlive the selection that enabled it.
+        // Never turn Cut into a backward-delete on a collapsed cursor.
+        if (!activeContent.selection.isSelectionMode) return false
+        val selected = activeContent.selectedText.ifEmpty { currentInputConnection()?.getSelectedText(0) }
+        if (selected.isNullOrEmpty()) return false
         notifyKeyboardEdit()
         autoSpace.setInactive()
         phantomSpace.setInactive()
         // Use the keyboard-owned clipboard path for deterministic cut.
         // An IME context-menu RPC can acknowledge dispatch while the host
         // silently ignores the command; never report that as success.
-        val text = activeContent.selectedText.ifBlank { currentInputConnection()?.getSelectedText(0) }
-        if (text != null) {
-            clipboardManager.addNewPlaintext(text.toString())
-        } else {
-            appContext.showShortToastSync("Failed to retrieve selected text requested to cut: Eiter selection state is invalid or an error occurred within the input connection.")
-        }
+        clipboardManager.addNewPlaintext(selected.toString())
         return deleteBackwards(OperationUnit.CHARACTERS)
     }
 
@@ -581,17 +581,15 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      * @return True on success, false if an error occurred or the input connection is invalid.
      */
     fun performClipboardCopy(): Boolean {
+        if (!activeContent.selection.isSelectionMode) return false
+        val selected = activeContent.selectedText.ifEmpty { currentInputConnection()?.getSelectedText(0) }
+        if (selected.isNullOrEmpty()) return false
         notifyKeyboardEdit()
         autoSpace.setInactive()
         phantomSpace.setInactive()
         // Keep copy on the proven selection -> clipboard path; host-side
         // copy requests do not reliably report whether any data was copied.
-        val text = activeContent.selectedText.ifBlank { currentInputConnection()?.getSelectedText(0) }
-        if (text != null) {
-            clipboardManager.addNewPlaintext(text.toString())
-        } else {
-            appContext.showShortToastSync("Failed to retrieve selected text requested to copy: Eiter selection state is invalid or an error occurred within the input connection.")
-        }
+        clipboardManager.addNewPlaintext(selected.toString())
         val activeSelection = activeContent.selection
         return setSelection(activeSelection.end, activeSelection.end)
     }
