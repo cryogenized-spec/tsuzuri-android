@@ -40,6 +40,7 @@ try{
   await page.goto(address,{waitUntil:"networkidle"});
   await page.locator("#keyboardContent .key").first().waitFor();
   assert.ok(await page.locator("#keyboardContent .key").count()>=25,"keyboard keys must render");
+  assert.ok((await page.locator("#keyboardContent .key .hint").allTextContents()).every(h=>!h.includes("Ctrl")),"simulator must not advertise disabled clipboard shortcuts");
   await page.locator('[data-key="h"]').click();
   await page.locator('[data-key="i"]').click();
   assert.equal(await page.locator("#draft").inputValue(),"hi");
