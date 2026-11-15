@@ -29,8 +29,29 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+/** EXIF transform encoded separately so every mirrored case can be unit tested. */
+internal data class StickerTransform(
+    val rotation: Int = 0,
+    val flipHorizontal: Boolean = false,
+    val flipVertical: Boolean = false,
+) {
+    val needed get() = rotation != 0 || flipHorizontal || flipVertical
+}
+
 /** Limits apply to untrusted gallery images as well as pack metadata. */
 internal object StickerRules {
+    /** EXIF orientation codes 1–8; transverse is reflection plus quarter-turn. */
+    fun exifTransform(orientation: Int): StickerTransform = when (orientation) {
+        2 -> StickerTransform(flipHorizontal = true)
+        3 -> StickerTransform(rotation = 180)
+        4 -> StickerTransform(flipVertical = true)
+        5 -> StickerTransform(rotation = 90, flipHorizontal = true)
+        6 -> StickerTransform(rotation = 90)
+        7 -> StickerTransform(rotation = -90, flipHorizontal = true)
+        8 -> StickerTransform(rotation = -90)
+        else -> StickerTransform()
+    }
+
     const val MAX_PACKS = 12
     const val MAX_STICKERS = 200
     const val MAX_BYTES = 8 * 1024 * 1024
@@ -230,21 +251,23 @@ internal object StickerStore {
                 } ?: return@withLock false
 
                 val sticker = try {
-                    val rotation = try {
-                        when (ExifInterface(ByteArrayInputStream(bytes)).getAttributeInt(
+                    val exifOrientation = try {
+                        ExifInterface(ByteArrayInputStream(bytes)).getAttributeInt(
                             ExifInterface.TAG_ORIENTATION,
                             ExifInterface.ORIENTATION_NORMAL,
-                        )) {
-                            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-                            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-                            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-                            else -> 0f
-                        }
-                    } catch (_: Exception) { 0f }
-                    val rotated = if (rotation != 0f) {
+                        )
+                    } catch (_: Exception) { ExifInterface.ORIENTATION_NORMAL }
+                    val transform = StickerRules.exifTransform(exifOrientation)
+                    val rotated = if (transform.needed) {
                         Bitmap.createBitmap(
                             decoded, 0, 0, decoded.width, decoded.height,
-                            Matrix().apply { postRotate(rotation) }, true,
+                            Matrix().apply {
+                                setRotate(transform.rotation.toFloat())
+                                postScale(
+                                    if (transform.flipHorizontal) -1f else 1f,
+                                    if (transform.flipVertical) -1f else 1f,
+                                )
+                            }, true,
                         )
                     } else decoded
                     val output = Bitmap.createBitmap(
