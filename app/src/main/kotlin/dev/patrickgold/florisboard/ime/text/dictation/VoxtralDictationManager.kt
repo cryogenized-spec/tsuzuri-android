@@ -152,6 +152,7 @@ class VoxtralDictationManager(
     private var sessionGeneration = 0L
     private var autoStopJob: Job? = null
     private var activeLease: AudioSessionLease? = null
+    private var recordingEditorSessionId: Long? = null
     private var operationJob: Job? = null
 
     init {
@@ -207,6 +208,7 @@ class VoxtralDictationManager(
     private fun startListening(mode: TranscriptionBackend) {
         if (operationJob?.isActive == true) return
         val generation = ++sessionGeneration
+        val startingEditorSessionId = editorInstance.activeInputSessionId
         operationJob = scope.launch {
             if (aiAvailabilityPolicy.current() !is AiAvailability.Available) return@launch
             // Reading the key touches the Keystore-backed store, so it stays off the main thread.
@@ -239,7 +241,8 @@ class VoxtralDictationManager(
                     audioSessionCoordinator.tryStart(AudioSessionOwner.DICTATION, session.mode, session.recorder, session::close)
                         .also { acquired = (it as? AudioSessionStartResult.Started)?.lease }
                 }
-                if (generation != sessionGeneration || aiAvailabilityPolicy.current() !is AiAvailability.Available) {
+                if (generation != sessionGeneration || aiAvailabilityPolicy.current() !is AiAvailability.Available ||
+                    editorInstance.activeInputSessionId != startingEditorSessionId) {
                     acquired?.cancel(); snapshot?.close(); return@launch
                 }
                 val lease = acquired
@@ -252,6 +255,7 @@ class VoxtralDictationManager(
                 liveSource?.let { source -> startLive(source, lease, session) }
                 activeSession = snapshot
                 activeLease = lease
+                recordingEditorSessionId = startingEditorSessionId
                 feedbackController.begin(lease.sessionId)
                 syncRecordingSession(lease)
                 _stateFlow.value = DictationState.LISTENING
@@ -292,6 +296,7 @@ class VoxtralDictationManager(
     fun cancelDictation() {
         endLive(keepText = false)
         val lease = activeLease ?: run {
+            recordingEditorSessionId = null
             sessionGeneration++
             operationJob?.cancel(); operationJob = null
             audioSessionCoordinator.invalidate(AudioSessionInvalidation.OWNER_CANCELLED, AudioSessionOwner.DICTATION)
@@ -306,6 +311,7 @@ class VoxtralDictationManager(
         feedbackController.cancel(lease.sessionId)
         activeLease = null
         activeSession = null
+        recordingEditorSessionId = null
         _recordingSessionFlow.value = null
         _stateFlow.value = DictationState.IDLE
         appContext.showShortToastSync(dev.patrickgold.florisboard.R.string.ime__dictation__cancelled)
@@ -331,7 +337,7 @@ class VoxtralDictationManager(
             autoStopJob?.cancel(); autoStopJob = null
             val session = activeSession ?: return@launch
             val transcriptionClient = session.client ?: return@launch
-            val targetEditorSessionId = editorInstance.activeInputSessionId
+            val targetEditorSessionId = recordingEditorSessionId ?: -1L
             val rawOutcome = transcriptionOnlyOperation.stopAndTranscribe(lease, transcriptionClient)
             // Ordinary dictation is the only path that is cleaned. It uses the snapshot taken at
             // recording start, runs off the main thread, and the lease is rechecked right before commit.
@@ -339,8 +345,12 @@ class VoxtralDictationManager(
                 OrdinaryDictationCleanup.apply(rawOutcome, session.dictionary?.cleaner)
             }
 
-            if (!lease.isCurrent || editorInstance.activeInputSessionId != targetEditorSessionId ||
-                aiAvailabilityPolicy.current() !is AiAvailability.Available) {
+            if (!VoiceDictationCommitGate.mayCommit(
+                    targetEditorSessionId,
+                    editorInstance.activeInputSessionId,
+                    lease.isCurrent,
+                    aiAvailabilityPolicy.current() is AiAvailability.Available,
+                )) {
                 feedbackController.cancel(lease.sessionId)
                 if (activeLease?.sessionId == lease.sessionId) {
                     activeLease = null
@@ -363,8 +373,12 @@ class VoxtralDictationManager(
             val locallyCleaned = (cleaned as DictationCleanupResult.Ready).outcome
             val outcome = applyConfiguredAutoCleanup(locallyCleaned)
             // The model call may take seconds: do not edit a different host or private editor.
-            if (!lease.isCurrent || editorInstance.activeInputSessionId != targetEditorSessionId ||
-                aiAvailabilityPolicy.current() !is AiAvailability.Available) {
+            if (!VoiceDictationCommitGate.mayCommit(
+                    targetEditorSessionId,
+                    editorInstance.activeInputSessionId,
+                    lease.isCurrent,
+                    aiAvailabilityPolicy.current() is AiAvailability.Available,
+                )) {
                 feedbackController.cancel(lease.sessionId)
                 finishSession(lease)
                 _stateFlow.value = DictationState.IDLE
@@ -799,6 +813,7 @@ class VoxtralDictationManager(
         if (activeLease?.sessionId == lease.sessionId) {
             activeLease = null
             activeSession = null
+            recordingEditorSessionId = null
             _recordingSessionFlow.value = null
             operationJob = null
         }
