@@ -55,6 +55,7 @@ class LlmRewriteClient(
         val prompt: RewritePromptPreset?,
         val voiceInstruction: String?,
         val input: String,
+        val structuredSystemInstruction: String? = null,
     )
 
     suspend fun rewrite(input: String, prompt: RewritePromptPreset): Result<String> {
@@ -73,6 +74,20 @@ class LlmRewriteClient(
             return Result.failure(error)
         }
         return executeWithRetry(preparedRequest)
+    }
+
+    /** Explicit BYOK request for a data-only, locally validated pre-screen proposal. */
+    suspend fun rewriteStructured(input: String, instruction: String, contract: String): Result<String> {
+        if (contract.isBlank() || instruction.isBlank()) {
+            return Result.failure(IllegalArgumentException("A contract and edit instruction are required."))
+        }
+        val prepared = prepareRequest(
+            input = input,
+            prompt = null,
+            voiceInstruction = instruction,
+            structuredSystemInstruction = contract,
+        ).getOrElse { return Result.failure(it) }
+        return executeWithRetry(prepared)
     }
 
     private suspend fun executeWithRetry(preparedRequest: PreparedRequest): Result<String> {
@@ -107,6 +122,7 @@ class LlmRewriteClient(
         input: String,
         prompt: RewritePromptPreset?,
         voiceInstruction: String?,
+        structuredSystemInstruction: String? = null,
     ): Result<PreparedRequest> {
         val apiKey = apiKeyProvider().trim()
         if (apiKey.isEmpty()) {
@@ -142,6 +158,7 @@ class LlmRewriteClient(
                 prompt = prompt,
                 voiceInstruction = voiceInstruction,
                 input = preparedInput,
+                structuredSystemInstruction = structuredSystemInstruction,
             ),
         )
     }
@@ -223,7 +240,7 @@ class LlmRewriteClient(
     private fun buildAnthropicPayload(request: PreparedRequest): JsonObject {
         return buildJsonObject {
             put("model", JsonPrimitive(request.model))
-            put("max_tokens", JsonPrimitive(1024))
+            put("max_tokens", JsonPrimitive(if (request.structuredSystemInstruction != null) 4096 else 1024))
             put("temperature", JsonPrimitive(0.35))
             put("system", JsonPrimitive(systemInstruction(request)))
             put("messages", buildJsonArray {
@@ -262,6 +279,7 @@ class LlmRewriteClient(
         "You rewrite user-provided text. Return only the rewritten text without explanation."
 
     private fun systemInstruction(request: PreparedRequest): String = when {
+        request.structuredSystemInstruction != null -> request.structuredSystemInstruction
         request.voiceInstruction != null -> VoiceRewritePolicy.FixedInstruction
         else -> presetRewriteSystemInstruction
     }
