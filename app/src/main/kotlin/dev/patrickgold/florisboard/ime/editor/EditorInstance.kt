@@ -562,7 +562,9 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         // A long-press popup may outlive the selection that enabled it.
         // Never turn Cut into a backward-delete on a collapsed cursor.
         if (!activeContent.selection.isSelectionMode) return false
-        val selected = activeContent.selectedText.ifEmpty { currentInputConnection()?.getSelectedText(0) }
+        // Confirm against the live editor rather than trusting only the
+        // potentially stale cached selection; a cancelled popup must be safe.
+        val selected = currentInputConnection()?.getSelectedText(0)
         if (selected.isNullOrEmpty()) return false
         notifyKeyboardEdit()
         autoSpace.setInactive()
@@ -582,7 +584,9 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      */
     fun performClipboardCopy(): Boolean {
         if (!activeContent.selection.isSelectionMode) return false
-        val selected = activeContent.selectedText.ifEmpty { currentInputConnection()?.getSelectedText(0) }
+        // Confirm against the live editor rather than trusting only the
+        // potentially stale cached selection; a cancelled popup must be safe.
+        val selected = currentInputConnection()?.getSelectedText(0)
         if (selected.isNullOrEmpty()) return false
         notifyKeyboardEdit()
         autoSpace.setInactive()
