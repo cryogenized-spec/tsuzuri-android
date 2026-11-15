@@ -87,6 +87,11 @@ class LlmRewriteClient(
             voiceInstruction = instruction,
             structuredSystemInstruction = contract,
         ).getOrElse { return Result.failure(it) }
+        // Unlike inherited rewrite modes, pre-screen responses may contain
+        // source drafts. Refuse cleartext endpoints before any key is sent.
+        if (!prepared.endpointUrl.startsWith("https://", ignoreCase = true)) {
+            return Result.failure(IllegalArgumentException("Pre-screen AI requires HTTPS."))
+        }
         return executeWithRetry(prepared)
     }
 
