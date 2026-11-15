@@ -35,6 +35,22 @@ class StickerRulesTest : FunSpec({
         StickerRules.validPackName("cats\nprivate") shouldBe false
     }
 
+    test("all eight EXIF orientations including reflections are normalized") {
+        StickerRules.exifTransform(1) shouldBe StickerTransform()
+        StickerRules.exifTransform(2) shouldBe StickerTransform(flipHorizontal = true)
+        StickerRules.exifTransform(3) shouldBe StickerTransform(rotation = 180)
+        StickerRules.exifTransform(4) shouldBe StickerTransform(flipVertical = true)
+        StickerRules.exifTransform(5) shouldBe StickerTransform(
+            rotation = 90, flipHorizontal = true,
+        )
+        StickerRules.exifTransform(6) shouldBe StickerTransform(rotation = 90)
+        StickerRules.exifTransform(7) shouldBe StickerTransform(
+            rotation = -90, flipHorizontal = true,
+        )
+        StickerRules.exifTransform(8) shouldBe StickerTransform(rotation = -90)
+        StickerRules.exifTransform(100) shouldBe StickerTransform()
+    }
+
     test("import and storage caps remain explicitly bounded") {
         StickerRules.MAX_BYTES shouldBe 8 * 1024 * 1024
         StickerRules.TARGET_SIZE shouldBe 512
