@@ -218,6 +218,10 @@ class LlmRewriteClient(
                 )
             }
 
+            val parsed = Json.parseToJsonElement(responseBody).jsonObject
+            if (!RewriteResponseIntegrity.isComplete(parsed)) {
+                throw IllegalStateException("AI rewrite response was truncated; the original transcript was preserved.")
+            }
             val rewrittenText = extractRewrite(responseBody).trim()
             if (rewrittenText.isBlank()) {
                 throw IllegalStateException("LLM returned an empty rewrite.")
@@ -361,4 +365,16 @@ class LlmRewriteClient(
 private fun JsonObject.optString(key: String): String? {
     val value = this[key] as? JsonPrimitive ?: return null
     return value.contentOrNull
+}
+
+
+/** Do not silently replace dictated text with truncated content from any supported text-model API. */
+internal object RewriteResponseIntegrity {
+    fun isComplete(root: JsonObject): Boolean {
+        if (root.optString("stop_reason") == "max_tokens") return false
+        if (root.optString("status") == "incomplete") return false
+        val choice = (root["choices"] as? JsonArray)?.firstOrNull() as? JsonObject
+        if (choice?.optString("finish_reason") == "length") return false
+        return true
+    }
 }
