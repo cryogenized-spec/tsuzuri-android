@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -144,6 +145,11 @@ fun HomeScreen() = FlorisScreen {
         val quickTryScope = rememberCoroutineScope()
         val activeSubtype by subtypeManager.activeSubtypeFlow.collectFlowAsState()
         val splitLayoutMode by prefs.keyboard.splitLayoutMode.collectAsState()
+        val windowConfigs by prefs.keyboard.windowConfig.collectAsState()
+        val configuration = LocalConfiguration.current
+        val oneHand = QuickHandPreset.of(
+            windowConfigs, configuration.screenWidthDp, configuration.screenHeightDp,
+        )
         var showInputDemo by remember { mutableStateOf(false) }
         var quickInputDemo by remember { mutableStateOf(QuickInputDemo.TEXT) }
         var scratchInput by remember { mutableStateOf("") }
@@ -217,7 +223,49 @@ fun HomeScreen() = FlorisScreen {
                     ChoiceOption(SplitLayoutMode.ALWAYS, "Split for two thumbs"),
                 ),
                 selected = splitLayoutMode,
-                onSelect = { quickTryScope.launch { prefs.keyboard.splitLayoutMode.set(it) } },
+                onSelect = { chosen ->
+                    quickTryScope.launch {
+                        // Split and one-handed are alternative geometry modes.
+                        if (chosen != SplitLayoutMode.NEVER && oneHand != QuickHandPreset.FULL) {
+                            prefs.keyboard.windowConfig.set(
+                                QuickHandPreset.update(
+                                    prefs.keyboard.windowConfig.get(),
+                                    configuration.screenWidthDp,
+                                    configuration.screenHeightDp,
+                                    QuickHandPreset.FULL,
+                                ),
+                            )
+                        }
+                        prefs.keyboard.splitLayoutMode.set(chosen)
+                    }
+                },
+            )
+
+            OwnkeyChoiceListRow(
+                modifier = Modifier.testTag("quick-try-one-handed"),
+                title = "One-handed typing",
+                summary = "Shrink the keyboard so your thumb can reach every key.",
+                options = listOf(
+                    ChoiceOption(QuickHandPreset.FULL, "Full keyboard"),
+                    ChoiceOption(QuickHandPreset.LEFT, "Left thumb"),
+                    ChoiceOption(QuickHandPreset.RIGHT, "Right thumb"),
+                ),
+                selected = oneHand,
+                onSelect = { choice ->
+                    quickTryScope.launch {
+                        if (choice != QuickHandPreset.FULL) {
+                            prefs.keyboard.splitLayoutMode.set(SplitLayoutMode.NEVER)
+                        }
+                        prefs.keyboard.windowConfig.set(
+                            QuickHandPreset.update(
+                                prefs.keyboard.windowConfig.get(),
+                                configuration.screenWidthDp,
+                                configuration.screenHeightDp,
+                                choice,
+                            ),
+                        )
+                    }
+                },
             )
 
             OwnkeyRow(
