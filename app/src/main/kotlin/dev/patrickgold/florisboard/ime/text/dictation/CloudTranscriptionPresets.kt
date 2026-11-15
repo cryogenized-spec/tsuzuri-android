@@ -24,12 +24,23 @@ data class CloudTranscriptionPreset(
 object CloudTranscriptionPresets {
     const val OPENAI_KEYS = "https://platform.openai.com/api-keys"
     const val MISTRAL_KEYS = "https://console.mistral.ai/"
+    const val GROQ_KEYS = "https://console.groq.com/keys"
+    const val GROQ_LIMITS = "https://console.groq.com/docs/rate-limits"
     const val GOOGLE_CLOUD_SETUP = "https://docs.cloud.google.com/speech-to-text/docs/setup"
     const val GOOGLE_CLOUD_PRICING = "https://cloud.google.com/speech-to-text/pricing"
     const val GOOGLE_ANDROID_SPEECH = "https://developer.android.com/reference/android/speech/SpeechRecognizer"
     const val OPENAI_LIVE_GUIDE = "https://developers.openai.com/api/docs/guides/transcription"
 
     val presets: List<CloudTranscriptionPreset> = listOf(
+        CloudTranscriptionPreset(
+            id = "groq-whisper-turbo",
+            name = "Groq Whisper Large V3 Turbo",
+            description = "Free rate-limited tier · no payment card for free plan · recorded dictation",
+            endpointUrl = "https://api.groq.com/openai/v1/audio/transcriptions",
+            model = "whisper-large-v3-turbo",
+            setupUrl = GROQ_KEYS,
+            priceInfoUrl = "https://console.groq.com/docs/speech-to-text",
+        ),
         CloudTranscriptionPreset(
             id = "openai-transcribe",
             name = "OpenAI GPT-Transcribe",
@@ -66,6 +77,7 @@ object CloudTranscriptionPresets {
     /** Only approved known providers receive direct signup links; never pass user-provided URLs here. */
     fun setupUrlFor(endpointUrl: String): String? = when (endpointUrl.trim()) {
         "https://api.openai.com/v1/audio/transcriptions" -> OPENAI_KEYS
+        "https://api.groq.com/openai/v1/audio/transcriptions" -> GROQ_KEYS
         "https://api.mistral.ai/v1/audio/transcriptions", "" -> MISTRAL_KEYS
         else -> null
     }
