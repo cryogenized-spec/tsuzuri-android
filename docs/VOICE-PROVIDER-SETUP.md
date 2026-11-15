@@ -23,3 +23,7 @@ The popup's presets set the matching HTTPS endpoint and model and allow users to
 - Test switching OpenAI ↔ Mistral ↔ Groq and clearing old key; verify manual custom HTTPS endpoint, recording upload, cancellation, API errors, and supported formats.
 - Physical Android verification and integrated CI/review are required before release.
 
+
+## Follow-on PRs
+
+Natural/concise AI cleanup is a distinct opt-in text-model operation, with independent BYOK credentials and no automatic sending. Groq direct Whisper is available without Cloudflare; a user-owned Cloudflare Worker relay is only an optional future adapter.
