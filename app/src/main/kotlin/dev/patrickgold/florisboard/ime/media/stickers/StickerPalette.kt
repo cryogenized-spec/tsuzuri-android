@@ -4,7 +4,6 @@
  */
 package dev.patrickgold.florisboard.ime.media.stickers
 
-import android.app.KeyguardManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -50,9 +49,7 @@ internal fun openStickerLibrary(context: Context) {
 @Composable
 internal fun StickerPalette(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val keyguard = remember { context.getSystemService(KeyguardManager::class.java) }
-    val locked = keyguard == null || keyguard.isDeviceLocked || keyguard.isKeyguardLocked
-    if (locked) {
+    if (!rememberStickerDeviceUnlocked()) {
         Column(modifier = modifier.fillMaxWidth().padding(12.dp)) {
             Text("Saved stickers are hidden while the device is locked.")
         }
