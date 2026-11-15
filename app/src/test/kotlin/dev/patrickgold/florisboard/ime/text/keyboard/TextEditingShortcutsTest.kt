@@ -28,6 +28,14 @@ class TextEditingShortcutsTest : FunSpec({
             action("v", variation) shouldBe null
         }
     }
+    test("collapsed selection never offers destructive Cut or Copy shortcuts") {
+        action("x", hasSelection = false) shouldBe null
+        action("c", hasSelection = false) shouldBe null
+        action("a", hasSelection = false) shouldBe KeyCode.CLIPBOARD_SELECT_ALL
+        action("v", hasSelection = false) shouldBe KeyCode.CLIPBOARD_PASTE
+        action("x", hasSelection = true) shouldBe KeyCode.CLIPBOARD_CUT
+        action("c", hasSelection = true) shouldBe KeyCode.CLIPBOARD_COPY
+    }
     test("shortcuts can be disabled and require a text editor") {
         action("a", enabled = false) shouldBe null
         action("x", rich = false) shouldBe null
