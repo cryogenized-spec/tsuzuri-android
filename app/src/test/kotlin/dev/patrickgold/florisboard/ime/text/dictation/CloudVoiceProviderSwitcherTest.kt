@@ -1,0 +1,98 @@
+/*
+ * Copyright (C) 2026 Tsuzuri contributors
+ * Licensed under the Apache License, Version 2.0.
+ */
+package dev.patrickgold.florisboard.ime.text.dictation
+
+import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
+
+class CloudVoiceProviderSwitcherTest : FunSpec({
+    val mistral = "https://api.mistral.ai/v1/audio/transcriptions"
+    val groq = "https://api.groq.com/openai/v1/audio/transcriptions"
+    val openai = "https://api.openai.com/v1/audio/transcriptions"
+
+    test("failure to commit encrypted key deletion blocks all provider settings changes") {
+        var active = mistral
+        var model = "old"
+        var legacyKey = "legacy-secret"
+        val switcher = CloudVoiceProviderSwitcher(
+            currentEndpoint = { active },
+            durablyEraseKey = { false },
+            clearLegacyKey = { legacyKey = "" },
+            updateEndpoint = { active = it },
+            updateModel = { model = it },
+        )
+        switcher.switchTo(groq, "whisper-large-v3-turbo") shouldBe
+            CloudVoiceProviderSwitcher.SwitchResult.KeyDeletionFailed
+        active shouldBe mistral
+        model shouldBe "old"
+        legacyKey shouldBe "legacy-secret"
+    }
+
+    test("successful switch clears legacy key before target endpoint becomes visible") {
+        var active = mistral
+        var legacyKey = "legacy-secret"
+        var durableDeletion = false
+        val switcher = CloudVoiceProviderSwitcher(
+            currentEndpoint = { active },
+            durablyEraseKey = { durableDeletion = true; true },
+            clearLegacyKey = { legacyKey = "" },
+            updateEndpoint = {
+                durableDeletion shouldBe true
+                legacyKey shouldBe ""
+                active = it
+            },
+            updateModel = { },
+        )
+        switcher.switchTo(groq, "whisper-large-v3-turbo") shouldBe
+            CloudVoiceProviderSwitcher.SwitchResult.Applied(keyCleared = true)
+        active shouldBe groq
+    }
+
+    test("rapid consecutive provider choices finish in request order despite delayed deletion") {
+        runBlocking {
+            var active = mistral
+            val entered = CompletableDeferred<Unit>()
+            val unblock = CompletableDeferred<Unit>()
+            val switcher = CloudVoiceProviderSwitcher(
+                currentEndpoint = { active },
+                durablyEraseKey = {
+                    entered.complete(Unit)
+                    unblock.await()
+                    true
+                },
+                clearLegacyKey = {},
+                updateEndpoint = { active = it },
+                updateModel = {},
+            )
+            val first = async { switcher.switchTo(openai, "gpt-transcribe") }
+            entered.await()
+            val second = async { switcher.switchTo(groq, "whisper-large-v3-turbo") }
+            unblock.complete(Unit)
+            first.await() shouldBe CloudVoiceProviderSwitcher.SwitchResult.Applied(true)
+            second.await() shouldBe CloudVoiceProviderSwitcher.SwitchResult.Applied(true)
+            active shouldBe groq
+        }
+    }
+
+    test("key writes for the old provider cannot land after a provider host switch") {
+        var active = mistral
+        var edited = false
+        val switcher = CloudVoiceProviderSwitcher(
+            currentEndpoint = { active },
+            durablyEraseKey = { true },
+            clearLegacyKey = {},
+            updateEndpoint = { active = it },
+            updateModel = {},
+        )
+        switcher.switchTo(groq, "whisper-large-v3-turbo")
+        switcher.editKeyForHost(mistral) { edited = true; true } shouldBe false
+        edited shouldBe false
+        switcher.editKeyForHost(groq) { edited = true; true } shouldBe true
+        edited shouldBe true
+    }
+})
