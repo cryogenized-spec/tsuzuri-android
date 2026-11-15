@@ -5,7 +5,6 @@
 package dev.patrickgold.florisboard.ime.media.stickers
 
 import android.os.Bundle
-import android.app.KeyguardManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -98,8 +97,7 @@ internal fun StickerThumbnail(item: StickerEntry, modifier: Modifier = Modifier)
 @Composable
 internal fun StickerLibraryScreen(onClose: () -> Unit) {
     val context = LocalContext.current
-    val keyguard = remember { context.getSystemService(KeyguardManager::class.java) }
-    if (keyguard == null || keyguard.isDeviceLocked || keyguard.isKeyguardLocked) {
+    if (!rememberStickerDeviceUnlocked()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Unlock the device before managing private stickers.")
             TextButton(onClick = onClose) { Text("Close") }
