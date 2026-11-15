@@ -17,8 +17,12 @@ internal object TextEditingShortcuts {
         variation: KeyVariation,
         isRichTextEditor: Boolean,
         enabled: Boolean,
+        hasSelection: Boolean,
     ): TextKeyData? {
         if (!enabled || !isRichTextEditor || variation != KeyVariation.NORMAL) return null
+        // Cut and Copy must not be offered on a collapsed cursor. Select All
+        // and Paste remain available even without a current selection.
+        if (!hasSelection && letter.lowercase() in setOf("x", "c")) return null
         return when (letter.lowercase()) {
             "a" -> TextKeyData.CLIPBOARD_SELECT_ALL
             "x" -> TextKeyData.CLIPBOARD_CUT
