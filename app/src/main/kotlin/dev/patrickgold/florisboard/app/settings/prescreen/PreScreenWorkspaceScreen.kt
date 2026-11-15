@@ -23,6 +23,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +85,9 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
         val colorStored by prefsRef.preScreen.diffColor.collectAsState()
         val count = countStored.coerceIn(PreScreenContract.MIN_SUGGESTIONS, PreScreenContract.MAX_SUGGESTIONS)
         var colourInput by remember { mutableStateOf(colorStored) }
+        LaunchedEffect(colorStored) { colourInput = colorStored }
+        var countPreview by remember { mutableFloatStateOf(count.toFloat()) }
+        LaunchedEffect(countStored) { countPreview = count.toFloat() }
         var syntax by remember { mutableStateOf(PreScreenSyntax.MARKDOWN) }
         var draft by remember { mutableStateOf(TextFieldValue("")) }
         var instruction by remember { mutableStateOf("") }
@@ -91,6 +97,7 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
         var approvedText by remember { mutableStateOf<String?>(null) }
         var busy by remember { mutableStateOf(false) }
         var activeJob by remember { mutableStateOf<Job?>(null) }
+        var requestGeneration by remember { mutableIntStateOf(0) }
         var feedback by remember { mutableStateOf<String?>(null) }
 
         fun requestEdit(editInstruction: String, category: PreScreenKind? = null) {
@@ -102,6 +109,8 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
                 return
             }
             // Explicit user action only. Never send text on keystroke, launch or focus.
+            requestGeneration += 1
+            val thisRequest = requestGeneration
             busy = true
             feedback = null
             activeJob = scope.launch {
@@ -123,7 +132,7 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
                             ),
                         )
                     }
-                    if (draft.text != originalSnapshot) {
+                    if (requestGeneration != thisRequest || draft.text != originalSnapshot) {
                         feedback = "Draft changed during the request. The stale proposal was discarded."
                         return@launch
                     }
@@ -145,8 +154,10 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
                 } catch (_: Exception) {
                     feedback = "Could not contact the configured AI provider. Draft is unchanged."
                 } finally {
-                    busy = false
-                    activeJob = null
+                    if (requestGeneration == thisRequest) {
+                        busy = false
+                        activeJob = null
+                    }
                 }
             }
         }
@@ -165,7 +176,9 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
                 onValueChange = { updated ->
                     if (updated.text.length <= PreScreenContract.MAX_SOURCE_CHARS) {
                         if (updated.text != draft.text) {
+                            requestGeneration += 1
                             activeJob?.cancel()
+                            activeJob = null
                             busy = false
                             proposal = null
                             proposalSource = null
@@ -203,7 +216,9 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
                                     replacement.text,
                                     selection = TextRange(replacement.selectionStart, replacement.selectionEnd),
                                 )
+                                requestGeneration += 1
                                 activeJob?.cancel()
+                                activeJob = null
                                 busy = false
                                 proposal = null
                                 proposalSource = null
@@ -230,6 +245,7 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
                 ) { Text(if (busy) "Working…" else "Propose edit") }
                 if (busy) {
                     TextButton(onClick = {
+                        requestGeneration += 1
                         activeJob?.cancel()
                         activeJob = null
                         busy = false
@@ -301,6 +317,7 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
                             selectedCategory = null
                             feedback = "Approved locally. Copy to transfer it to another app."
                         },
+                        enabled = !busy,
                         modifier = Modifier.testTag("prescreen-approve"),
                     ) { Text("✅ Approve") }
                     OutlinedButton(
@@ -310,6 +327,7 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
                             selectedCategory = null
                             feedback = "Rejected. Your original draft is unchanged."
                         },
+                        enabled = !busy,
                         modifier = Modifier.testTag("prescreen-reject"),
                     ) { Text("❌ Reject") }
                 }
@@ -341,13 +359,14 @@ fun PreScreenWorkspaceScreen() = FlorisScreen {
             }
 
             Text("Preferences", style = MaterialTheme.typography.titleMedium)
-            Text("AI suggestions per proposal: $count")
+            Text("AI suggestions per proposal: ${countPreview.roundToInt()}")
             Slider(
-                value = count.toFloat(),
-                onValueChange = { next ->
+                value = countPreview,
+                onValueChange = { countPreview = it },
+                onValueChangeFinished = {
                     scope.launch {
                         prefsRef.preScreen.suggestionCount.set(
-                            next.roundToInt().coerceIn(
+                            countPreview.roundToInt().coerceIn(
                                 PreScreenContract.MIN_SUGGESTIONS, PreScreenContract.MAX_SUGGESTIONS,
                             ),
                         )
