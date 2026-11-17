@@ -480,8 +480,8 @@ private fun TextKeyButton(
                     defaultLabel = label,
                     recognitionCueLabel = rememberDictationRecognitionCueLabel(),
                 ) ?: return@let
-                val dpadEnabled by prefs.keyboard.spacebarDpadEnabled.collectAsState()
-                if (dpadEnabled) customLabel = "$customLabel · ⊕"
+                // The optional long-press D-pad stays available, but should not
+                // visually divide or crowd the primary space key.
             }
             SnyggText(
                 modifier = Modifier
