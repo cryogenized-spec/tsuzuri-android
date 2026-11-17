@@ -18,7 +18,9 @@ import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardFileStorage
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardItem
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardMediaProvider
 import dev.patrickgold.florisboard.ime.clipboard.provider.ItemType
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.florisboard.lib.kotlin.io.FsFile
 import org.florisboard.lib.kotlin.io.subDir
 import org.florisboard.lib.kotlin.io.subFile
@@ -230,6 +232,45 @@ class TsuzuriClipboardSecurityTest {
             assertTrue(manager.deleteClipAwait(saved, onlyIfUnpinned = false))
             assertFalse(storedFile.exists())
         } finally {
+            item?.close(context)
+            db.close()
+            sourceDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun releasedPrimaryMediaIsEventuallyDeletedAfterLastHistoryRow() = runBlocking {
+        val sourceDir = FsFile(context.cacheDir, "tsuzuri-deferred-test-" + System.nanoTime())
+        val archive = sourceDir.subDir(ClipboardFileStorage.CLIPBOARD_FILES_PATH)
+        archive.mkdirs()
+        val id = (System.nanoTime() and Long.MAX_VALUE).coerceAtLeast(1L)
+        archive.subFile(id.toString()).writeText("deferred-media-fixture")
+        val manager = context.clipboardManager().value
+        val db = ClipboardHistoryDatabase.new(context)
+        var item: ClipboardItem? = null
+        try {
+            item = ClipboardBackupMediaImporter.prepare(
+                context, sourceDir, oldPackage, 127, listOf(oldImage(id)), ItemType.IMAGE,
+            ).single()
+            val imported = requireNotNull(item)
+            val mediaUri = requireNotNull(imported.uri)
+            val file = ClipboardFileStorage.getFileForId(context, ContentUris.parseId(mediaUri))
+            manager.restoreHistoryForRestore(listOf(imported))
+            val row = db.clipboardItemDao().getAll().first { it.uri == mediaUri }
+            manager.updatePrimaryClip(imported)
+            assertTrue(manager.deleteClipAwait(row, onlyIfUnpinned = false))
+            assertTrue("Active primary media must survive history deletion", file.exists())
+
+            manager.updatePrimaryClip(ClipboardItem.text("different clip"))
+            // Make system clipboard ownership explicit in this emulator test.
+            val systemClipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+            systemClipboard.setPrimaryClip(ClipData.newPlainText("test", "different clip"))
+            withTimeout(10_000L) {
+                while (file.exists()) delay(50)
+            }
+            assertFalse("Released media must be reclaimed", file.exists())
+        } finally {
+            manager.updatePrimaryClip(null)
             item?.close(context)
             db.close()
             sourceDir.deleteRecursively()
