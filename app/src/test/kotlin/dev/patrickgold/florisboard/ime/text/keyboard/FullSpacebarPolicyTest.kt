@@ -32,7 +32,7 @@ class FullSpacebarPolicyTest : FunSpec({
 
     test("custom crowded or degenerate rows retain existing geometry") {
         FullSpacebarPolicy.shouldWiden(
-            KeyboardMode.CHARACTERS, false, List(9) { if (it == 4) KeyCode.SPACE else 65 + it },
+            KeyboardMode.CHARACTERS, false, List(7) { if (it == 3) KeyCode.SPACE else 65 + it },
         ) shouldBe false
         FullSpacebarPolicy.shouldWiden(
             KeyboardMode.CHARACTERS, false, listOf(KeyCode.SPACE, KeyCode.ENTER),
