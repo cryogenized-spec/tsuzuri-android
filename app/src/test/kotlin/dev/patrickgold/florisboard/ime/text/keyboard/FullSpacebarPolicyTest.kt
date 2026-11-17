@@ -39,6 +39,29 @@ class FullSpacebarPolicyTest : FunSpec({
         ) shouldBe false
     }
 
+    test("wide spacebar reserves touch width for neighboring punctuation and controls") {
+        val neighbors = listOf(
+            FullSpacebarPolicy.Neighbor(1.5f, canShrink = true),
+            FullSpacebarPolicy.Neighbor(1f, canShrink = true),
+            FullSpacebarPolicy.Neighbor(1f, canShrink = true),
+            FullSpacebarPolicy.Neighbor(1.5f, canShrink = true),
+        )
+        FullSpacebarPolicy.safeWidthFactor(11f, 1f, neighbors) shouldBe 4.6f
+        FullSpacebarPolicy.safeWidthFactor(7f, 1f, neighbors) shouldBe 3.25f
+        // An extremely narrow floating layout must preserve the original
+        // space width rather than force surrounding keys to negative sizes.
+        FullSpacebarPolicy.safeWidthFactor(4f, 1f, neighbors) shouldBe 1f
+    }
+
+    test("fixed-width keys cannot be consumed by a wider spacebar") {
+        val neighbors = listOf(
+            FullSpacebarPolicy.Neighbor(2f, canShrink = false),
+            FullSpacebarPolicy.Neighbor(2f, canShrink = false),
+        )
+        FullSpacebarPolicy.safeWidthFactor(6f, 1f, neighbors) shouldBe 2f
+        FullSpacebarPolicy.safeWidthFactor(4f, 1f, neighbors) shouldBe 1f
+    }
+
     test("CJK space can remain a single full-width key") {
         FullSpacebarPolicy.shouldWiden(
             KeyboardMode.CHARACTERS, false,
