@@ -196,15 +196,15 @@ class ClipboardManager(
             clipboardEventGeneration.invalidatePending()
             primaryClip = item
             if (prefs.clipboard.useInternalClipboard.get()) {
-            val syncBehavior = prefs.clipboard.syncToSystem.get()
-            val clipData = item?.toClipData(appContext)
-            if (clipData != null && syncBehavior.shouldSyncSet) {
-                systemClipboardManager.setPrimaryClip(clipData)
-            } else if (clipData == null && syncBehavior.shouldSyncClear) {
-                systemClipboardManager.clearPrimaryClipAnyApi()
-            }
-        } else {
-            systemClipboardManager.setOrClearPrimaryClip(item?.toClipData(appContext))
+                val syncBehavior = prefs.clipboard.syncToSystem.get()
+                val clipData = item?.toClipData(appContext)
+                if (clipData != null && syncBehavior.shouldSyncSet) {
+                    systemClipboardManager.setPrimaryClip(clipData)
+                } else if (clipData == null && syncBehavior.shouldSyncClear) {
+                    systemClipboardManager.clearPrimaryClipAnyApi()
+                }
+            } else {
+                systemClipboardManager.setOrClearPrimaryClip(item?.toClipData(appContext))
             }
         }
     }
