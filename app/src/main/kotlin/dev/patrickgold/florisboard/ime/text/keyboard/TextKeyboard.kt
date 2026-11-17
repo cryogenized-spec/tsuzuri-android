@@ -75,7 +75,7 @@ class TextKeyboard(
         } else emptyList()
         // A normal characters keyboard gets a single, visibly wider spacebar.
         // Split keyboards keep their own two-thumb space keys unchanged.
-        val widenedSpaces = if (!isSplitLayout) widenStandardSpaceKeys() else emptyList()
+        val widenedSpaces = if (!isSplitLayout) widenStandardSpaceKeys(keyboardWidth, desiredKey) else emptyList()
 
         var everyRowSplit = true
         for ((r, row) in rows().withIndex()) {
@@ -123,7 +123,12 @@ class TextKeyboard(
      * Restore the factors after layout: a window-mode switch must not carry the
      * wide geometry into a split or compact input layout.
      */
-    private fun widenStandardSpaceKeys(): List<Pair<TextKey, Triple<Float, Float, Float>>> {
+    private fun widenStandardSpaceKeys(
+        keyboardWidth: Float,
+        desiredKey: Key,
+    ): List<Pair<TextKey, Triple<Float, Float, Float>>> {
+        val rowMarginH = abs(desiredKey.touchBounds.width - desiredKey.visibleBounds.width)
+        val availableWidthUnits = (keyboardWidth - rowMarginH) / desiredKey.touchBounds.width
         val changed = mutableListOf<Pair<TextKey, Triple<Float, Float, Float>>>()
         for (row in arrangement) {
             // A previously collapsed duplicate has zero width and is not active.
@@ -133,9 +138,18 @@ class TextKeyboard(
                 val code = keyCodeForSplit(key)
                 code == KeyCode.SPACE || code == KeyCode.CJK_SPACE
             }
+            val safeWidth = FullSpacebarPolicy.safeWidthFactor(
+                availableWidthUnits = availableWidthUnits,
+                originalWidthFactor = space.flayWidthFactor,
+                neighbors = active.filterNot { it === space }.map {
+                    FullSpacebarPolicy.Neighbor(it.flayWidthFactor, canShrink = it.flayShrink > 0f)
+                },
+            )
+            if (safeWidth <= space.flayWidthFactor) continue
             changed += space to Triple(space.flayWidthFactor, space.flayGrow, space.flayShrink)
-            space.flayWidthFactor = maxOf(space.flayWidthFactor, FullSpacebarPolicy.PREFERRED_WIDTH_FACTOR)
-            // Preserve space width first; surrounding shortcut keys may shrink.
+            space.flayWidthFactor = safeWidth
+            // Protect the newly enlarged key; safeWidth reserves the minimum
+            // touch width of each neighboring control in compact layouts.
             space.flayShrink = 0.0f
         }
         return changed
