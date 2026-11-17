@@ -402,7 +402,9 @@ class ClipboardManager(
                 if (item.uri?.authority != ClipboardMediaProvider.AUTHORITY) continue
                 when {
                     uri in survivors -> deferredMediaDisposal.remove(uri)
-                    uri == active || uri == systemUri -> deferredMediaDisposal[uri] = item
+                    !ClipboardMediaRetentionPolicy.mayDispose(uri, survivors, active) || uri == systemUri -> {
+                        deferredMediaDisposal[uri] = item
+                    }
                     else -> {
                         item.close(appContext)
                         deferredMediaDisposal.remove(uri)
