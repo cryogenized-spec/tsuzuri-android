@@ -66,6 +66,7 @@ import dev.patrickgold.florisboard.app.ui.OwnkeySheet
 import dev.patrickgold.florisboard.app.ui.OwnkeyTextField
 import dev.patrickgold.florisboard.app.ui.OwnkeyTone
 import dev.patrickgold.florisboard.ime.text.dictation.CloudTranscriptionPresets
+import dev.patrickgold.florisboard.ime.text.dictation.CloudVoiceProviderGuard
 import dev.patrickgold.florisboard.ime.text.dictation.CloudVoiceProviderSwitcher
 import dev.patrickgold.florisboard.ime.text.dictation.TranscriptionBackend
 import dev.patrickgold.florisboard.ime.text.dictation.TranscriptionLanguageHints
@@ -86,6 +87,7 @@ import dev.patrickgold.florisboard.subtypeManager
 import dev.patrickgold.jetpref.datastore.model.collectAsState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.florisboard.lib.compose.DisposableLifecycleEffect
 import org.florisboard.lib.compose.OwnkeyTokens
@@ -170,16 +172,19 @@ fun VoxtralScreen() = FlorisScreen {
         var hasRewriteKey by rememberSaveable { mutableStateOf<Boolean?>(null) }
         LaunchedEffect(Unit) {
             val (cloud, rewrite) = withContext(Dispatchers.IO) {
-                val legacyApiKey = prefsRef.voxtral.apiKey.get().trim()
-                if (legacyApiKey.isNotBlank()) {
-                    // The plain-text key is only cleared once the encrypted store holds a key; dictation reads
-                    // the legacy one until then.
-                    val moved = runCatching {
-                        voxtralSecretsStore.hasApiKey() || voxtralSecretsStore.setApiKeyDurably(legacyApiKey)
-                    }.isSuccess
-                    if (moved) prefsRef.voxtral.apiKey.set("")
+                // Migration must be fenced by the same mutex as provider switches;
+                // otherwise an old key may be restored after its host is changed.
+                val cloudKeyPresent = CloudVoiceProviderGuard.mutex.withLock {
+                    val legacyApiKey = prefsRef.voxtral.apiKey.get().trim()
+                    if (legacyApiKey.isNotBlank()) {
+                        val moved = runCatching {
+                            voxtralSecretsStore.hasApiKey() || voxtralSecretsStore.setApiKeyDurably(legacyApiKey)
+                        }.getOrDefault(false)
+                        if (moved) prefsRef.voxtral.apiKey.set("").getOrThrow()
+                    }
+                    readKey { voxtralSecretsStore.hasApiKey() }
                 }
-                readKey { voxtralSecretsStore.hasApiKey() } to readKey { llmRewriteSecretsStore.hasApiKey() }
+                cloudKeyPresent to readKey { llmRewriteSecretsStore.hasApiKey() }
             }
             hasCloudKey = cloud
             hasRewriteKey = rewrite
