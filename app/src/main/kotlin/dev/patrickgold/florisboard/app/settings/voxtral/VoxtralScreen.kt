@@ -95,7 +95,11 @@ import org.florisboard.lib.compose.pluralsRes
 import org.florisboard.lib.compose.stringRes
 
 /** Dialogs and sheets of the AI screen; at most one is open. */
-private enum class AiPanel { CloudKey, CloudProvider, VoicePresets, Language, RewriteProvider, RewriteKey, RewriteModel, RewriteCustomModel, RewriteServer }
+internal enum class AiPanel { CloudKey, CloudProvider, VoicePresets, Language, RewriteProvider, RewriteKey, RewriteModel, RewriteCustomModel, RewriteServer }
+
+/** An outgoing bottom-sheet dismissal may arrive after the user switched to a dialog. */
+internal fun onRewriteModelSheetDismiss(current: AiPanel?): AiPanel? =
+    current.takeUnless { it == AiPanel.RewriteModel }
 
 @Composable
 fun VoxtralScreen() = FlorisScreen {
@@ -557,7 +561,7 @@ fun VoxtralScreen() = FlorisScreen {
                     errorText = keyError,
                 )
                 AiPanel.RewriteModel -> OwnkeySheet(
-                    onDismiss = closePanel,
+                    onDismiss = { panel = onRewriteModelSheetDismiss(panel) },
                     title = stringRes(R.string.settings__ai__rewrite_model__title),
                 ) { hide ->
                     val choices = RewriteModelChoices.forProvider(rewritePreset)
