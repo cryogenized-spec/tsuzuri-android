@@ -128,14 +128,7 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
                     if (SymbolShortcutStore.keyOf(computedLabel) != null) {
                         val options = SymbolShortcutStore.options()
                         val originalEntries = listOfNotNull(computedPopups.main) + computedPopups.relevant
-                        val customEntries: List<KeyData> = SymbolShortcutStore.forKey(computedLabel).map { symbol ->
-                            val points = symbol.codePoints().toArray()
-                            if (points.size == 1) {
-                                TextKeyData(type = KeyType.CHARACTER, code = points[0], label = symbol)
-                            } else {
-                                MultiTextKeyData(type = KeyType.CHARACTER, codePoints = points, label = symbol)
-                            }
-                        }
+                        val customEntries: List<KeyData> = SymbolShortcutStore.popupKeysFor(computedLabel)
                         if (options.priority == dev.patrickgold.florisboard.app.settings.symbols.SymbolPopupPriority.ORIGINAL) {
                             // Never promote inherited 'relevant' accents to 'main' in
                             // Original mode. That would silently change hint
