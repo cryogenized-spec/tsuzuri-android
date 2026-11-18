@@ -235,6 +235,7 @@ fun SymbolShortcutScreen() = FlorisScreen {
             ) {
                 Text("A · Select All | X · Cut | C · Copy | V · Paste", modifier = Modifier.weight(1f))
                 Switch(
+                    modifier = Modifier.semantics { contentDescription = "A X C V editing shortcuts: Select All, Cut, Copy and Paste" },
                     checked = editingEnabled,
                     onCheckedChange = { enabled ->
                         shortcutScope.launch { settingsPrefs.keyboard.editingShortcutsEnabled.set(enabled) }
