@@ -74,7 +74,7 @@ fun TextInputLayout(
     // The session publishes every level sample; the layout only needs to know whether one runs.
     val audioSessionActive by androidx.compose.runtime.remember(audioCoordinator) {
         audioCoordinator.state.map { it != null }.distinctUntilChanged()
-    }.collectAsState(initial = audioCoordinator.state.value != null)
+    }.collectAsState(initial = androidx.compose.runtime.remember(audioCoordinator) { audioCoordinator.state.value != null })
 
     InlineSuggestionsStyleCache()
 
@@ -88,11 +88,11 @@ fun TextInputLayout(
         // word is retyped never recompose the keyboard layout.
         val dictationFixChoosing by androidx.compose.runtime.remember(dictationFixController) {
             dictationFixController.state.map { it is DictationFixState.Choosing }.distinctUntilChanged()
-        }.collectAsState(initial = dictationFixController.state.value is DictationFixState.Choosing)
+        }.collectAsState(initial = androidx.compose.runtime.remember(dictationFixController) { dictationFixController.state.value is DictationFixState.Choosing })
         // The fix offer after dictation lives in the Smartbar, so the split toolbar gives way to it too.
         val dictationFixOffered by androidx.compose.runtime.remember(dictationFixController) {
             dictationFixController.state.map { it is DictationFixState.Offered }.distinctUntilChanged()
-        }.collectAsState(initial = dictationFixController.state.value is DictationFixState.Offered)
+        }.collectAsState(initial = androidx.compose.runtime.remember(dictationFixController) { dictationFixController.state.value is DictationFixState.Offered })
         val emojiSearchActive = keyboardManager.emojiSearch.isActive
         val showSmartbar = !compactSplit || state.isActionsOverflowVisible || emojiSearchActive ||
             keyboardManager.isRewriteOptionsVisible || dictationFixChoosing || dictationFixOffered || audioSessionActive

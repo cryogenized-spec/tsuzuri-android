@@ -154,6 +154,7 @@ fun BackupScreen() = FlorisScreen {
 
     val navController = LocalNavController.current
     val context = LocalContext.current
+    val speechBackupFailedMessage = stringRes(R.string.speech_dictionary__backup_failed)
     val cacheManager by context.cacheManager()
     val scope = rememberCoroutineScope()
 
@@ -218,7 +219,7 @@ fun BackupScreen() = FlorisScreen {
                 throw cancelled
             } catch (_: Exception) {
                 // The outer backup handler logs failures; keep private paths and data out of them.
-                throw IllegalStateException(context.getString(R.string.speech_dictionary__backup_failed))
+                throw IllegalStateException(speechBackupFailedMessage)
             }
         }
 

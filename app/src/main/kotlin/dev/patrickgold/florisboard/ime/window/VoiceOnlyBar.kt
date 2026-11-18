@@ -304,7 +304,7 @@ private fun VoiceOnlyBar(maxBarWidth: Dp) {
     // The session publishes every level sample; the bar shows no timer, so it only follows phase changes.
     val recordingState by remember(audioSessionCoordinator) {
         audioSessionCoordinator.state.map { voiceRecordingRowState(it, nowMs = 0L) }.distinctUntilChanged()
-    }.collectAsState(initial = voiceRecordingRowState(audioSessionCoordinator.state.value, nowMs = 0L))
+    }.collectAsState(initial = remember(audioSessionCoordinator) { voiceRecordingRowState(audioSessionCoordinator.state.value, nowMs = 0L) })
     val recording = recordingState
     val feedback by dictationManager.feedbackStateFlow.collectAsState()
     // Read only in the waveform's draw pass, so level samples never recompose the bar.
