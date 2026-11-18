@@ -97,6 +97,13 @@ class ClipboardManager(
     private val cleanUpJob: Job
     private var clipHistoryDb: ClipboardHistoryDatabase? = null
     private val historyMutationMutex = Mutex()
+    // The same lock guards primary ownership changes and the final media
+    // reference check + file disposal. A cleanup must not delete a URI that
+    // an external clipboard callback has just made active.
+    private val mediaOwnershipLock = Any()
+    // Media removed from history while still on the primary/system clipboard
+    // must be deleted only after those references are released.
+    private val deferredMediaDisposal = mutableMapOf<String, ClipboardItem>()
     private val clipHistoryDao: ClipboardHistoryDao? get() = clipHistoryDb?.clipboardItemDao()
 
     val historyFlow: StateFlow<ClipboardHistory>
@@ -187,20 +194,39 @@ class ClipboardManager(
      * Sets the current primary clip without updating the internal clipboard history.
      */
     fun updatePrimaryClip(item: ClipboardItem?) {
-        // Internal updates supersede any pending external clipboard callback.
-        clipboardEventGeneration.invalidatePending()
-        primaryClip = item
-        if (prefs.clipboard.useInternalClipboard.get()) {
-            val syncBehavior = prefs.clipboard.syncToSystem.get()
-            val clipData = item?.toClipData(appContext)
-            if (clipData != null && syncBehavior.shouldSyncSet) {
-                systemClipboardManager.setPrimaryClip(clipData)
-            } else if (clipData == null && syncBehavior.shouldSyncClear) {
-                systemClipboardManager.clearPrimaryClipAnyApi()
+        synchronized(mediaOwnershipLock) {
+            // Internal updates supersede any pending external clipboard callback.
+            clipboardEventGeneration.invalidatePending()
+            primaryClip = item
+            if (prefs.clipboard.useInternalClipboard.get()) {
+                val syncBehavior = prefs.clipboard.syncToSystem.get()
+                val clipData = item?.toClipData(appContext)
+                if (clipData != null && syncBehavior.shouldSyncSet) {
+                    systemClipboardManager.setPrimaryClip(clipData)
+                } else if (clipData == null && syncBehavior.shouldSyncClear) {
+                    systemClipboardManager.clearPrimaryClipAnyApi()
+                }
+            } else {
+                systemClipboardManager.setOrClearPrimaryClip(item?.toClipData(appContext))
             }
-        } else {
-            systemClipboardManager.setOrClearPrimaryClip(item?.toClipData(appContext))
         }
+        scheduleDeferredMediaCleanup()
+    }
+
+    /**
+     * Apply an external event under the same ownership lock as media disposal.
+     * The epoch check still rejects superseded events atomically.
+     */
+    private fun applyCurrentClipboardEvent(
+        epoch: Long,
+        mediaSource: ClipboardExternalMediaSource? = null,
+        update: () -> Unit,
+    ): Boolean {
+        val applied = synchronized(mediaOwnershipLock) {
+            clipboardEventGeneration.applyIfCurrent(epoch, mediaSource, update)
+        }
+        if (applied) scheduleDeferredMediaCleanup()
+        return applied
     }
 
     /**
@@ -208,6 +234,7 @@ class ClipboardManager(
      */
     override fun onPrimaryClipChanged() {
         val callbackGeneration = clipboardEventGeneration.next()
+        scheduleDeferredMediaCleanup()
         val syncBehavior = prefs.clipboard.syncToFloris.get()
         if (!prefs.clipboard.useInternalClipboard.get() || syncBehavior != ClipboardSyncBehavior.NO_EVENTS) {
             val systemPrimaryClip = systemClipboardManager.primaryClip
@@ -220,20 +247,20 @@ class ClipboardManager(
 
                 if (systemPrimaryClip == null) {
                     if (syncBehavior.shouldSyncClear) {
-                        clipboardEventGeneration.applyIfCurrent(callbackGeneration) { primaryClip = null }
+                        applyCurrentClipboardEvent(callbackGeneration) { primaryClip = null }
                     }
                     return@launch
                 }
 
                 if (systemPrimaryClip.getItemAt(0).let { it.text == null && it.uri == null }) {
                     if (syncBehavior.shouldSyncClear) {
-                        clipboardEventGeneration.applyIfCurrent(callbackGeneration) { primaryClip = null }
+                        applyCurrentClipboardEvent(callbackGeneration) { primaryClip = null }
                     }
                     return@launch
                 }
 
                 if (!syncBehavior.shouldSyncSet) {
-                    clipboardEventGeneration.applyIfCurrent(callbackGeneration) { /* no import */ }
+                    applyCurrentClipboardEvent(callbackGeneration) { /* no import */ }
                     return@launch
                 }
 
@@ -267,7 +294,7 @@ class ClipboardManager(
                     val item = ClipboardItem.fromClipData(
                         appContext, systemPrimaryClip, cloneUri = !incomingSensitive,
                     )
-                    val applied = clipboardEventGeneration.applyIfCurrent(callbackGeneration, mediaSource) {
+                    val applied = applyCurrentClipboardEvent(callbackGeneration, mediaSource) {
                         primaryClip = item
                         insertOrMoveBeginning(item)
                     }
@@ -284,7 +311,7 @@ class ClipboardManager(
                         }
                     }
                 } else {
-                    clipboardEventGeneration.applyIfCurrent(callbackGeneration) { /* accepted current clip */ }
+                    applyCurrentClipboardEvent(callbackGeneration) { /* accepted current clip */ }
                 }
             }
         }
@@ -365,11 +392,52 @@ class ClipboardManager(
         removed: Collection<ClipboardItem>,
         db: ClipboardHistoryDatabase,
     ) {
-        val survivors = db.clipboardItemDao().getAll().mapNotNull { it.uri?.toString() }.toSet()
-        val active = primaryClip?.uri?.toString()
-        for (item in removed.distinctBy { it.uri?.toString() ?: "row:" + it.id }) {
-            if (ClipboardMediaRetentionPolicy.mayDispose(item.uri?.toString(), survivors, active)) {
-                item.close(appContext)
+        synchronized(mediaOwnershipLock) {
+            val survivors = db.clipboardItemDao().getAll().mapNotNull { it.uri?.toString() }.toSet()
+            // Account for callbacks still queued on the system clipboard.
+            val systemUri = tryOrNull { systemClipboardManager.primaryClip?.getItemAt(0)?.uri?.toString() }
+            val active = primaryClip?.uri?.toString()
+            for (item in removed.distinctBy { it.uri?.toString() ?: "row:" + it.id }) {
+                val uri = item.uri?.toString() ?: continue
+                if (item.uri?.authority != ClipboardMediaProvider.AUTHORITY) continue
+                when {
+                    uri in survivors -> deferredMediaDisposal.remove(uri)
+                    !ClipboardMediaRetentionPolicy.mayDispose(uri, survivors, active) || uri == systemUri -> {
+                        deferredMediaDisposal[uri] = item
+                    }
+                    else -> {
+                        item.close(appContext)
+                        deferredMediaDisposal.remove(uri)
+                    }
+                }
+            }
+        }
+    }
+
+    /** Recheck deferred files under the history lock after a primary-clip change. */
+    private fun scheduleDeferredMediaCleanup() {
+        if (synchronized(mediaOwnershipLock) { deferredMediaDisposal.isEmpty() }) return
+        ioScope.launch {
+            historyMutationMutex.withLock {
+                val survivors = historyDatabase().clipboardItemDao().getAll()
+                    .mapNotNull { it.uri?.toString() }.toSet()
+                synchronized(mediaOwnershipLock) {
+                    val active = primaryClip?.uri?.toString()
+                    val systemUri = tryOrNull {
+                        systemClipboardManager.primaryClip?.getItemAt(0)?.uri?.toString()
+                    }
+                    val pending = deferredMediaDisposal.iterator()
+                    while (pending.hasNext()) {
+                        val (uri, item) = pending.next()
+                        if (uri in survivors) {
+                            // A new history row now owns this file.
+                            pending.remove()
+                        } else if (uri != active && uri != systemUri) {
+                            item.close(appContext)
+                            pending.remove()
+                        }
+                    }
+                }
             }
         }
     }

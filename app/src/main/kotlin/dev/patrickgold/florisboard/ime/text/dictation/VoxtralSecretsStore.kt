@@ -61,6 +61,17 @@ class VoxtralSecretsStore(
         }
     }
 
+    /**
+     * UI saves must survive process death before the user is told they worked.
+     * Call only from Dispatchers.IO, never the main thread.
+     */
+    fun setApiKeyDurably(apiKey: String): Boolean {
+        val value = apiKey.trim()
+        val editor = encryptedPrefs.edit()
+        if (value.isEmpty()) editor.remove(KEY_API_KEY) else editor.putString(KEY_API_KEY, value)
+        return editor.commit()
+    }
+
     fun clearApiKey() {
         encryptedPrefs.edit().remove(KEY_API_KEY).apply()
     }

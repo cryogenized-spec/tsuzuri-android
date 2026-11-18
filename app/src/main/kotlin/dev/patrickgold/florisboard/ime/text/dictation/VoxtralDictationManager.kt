@@ -156,7 +156,8 @@ class VoxtralDictationManager(
     private var operationJob: Job? = null
 
     init {
-        migrateLegacyApiKeyIfNeeded()
+        // Migrate on IO and under the same host-switch lock as cloud sessions.
+        scope.launch(Dispatchers.IO) { migrateLegacyApiKeyIfNeeded() }
         scope.launch {
             aiAvailabilityPolicy.state.collectLatest { availability ->
                 if (availability is AiAvailability.Unavailable && activeLease != null) {
@@ -767,15 +768,18 @@ class VoxtralDictationManager(
         return secureApiKey.ifEmpty { prefs.voxtral.apiKey.get().trim() }
     }
 
-    private fun migrateLegacyApiKeyIfNeeded() {
-        // One-time migration at construction, before any recording session. The
-        // settings host switch also clears this field durably before host update.
-        val legacy = prefs.voxtral.apiKey.get().trim()
-        if (legacy.isEmpty()) return
-        if (voxtralSecretsStore.getApiKey().isBlank()) {
-            voxtralSecretsStore.setApiKey(legacy)
+    private suspend fun migrateLegacyApiKeyIfNeeded() {
+        // Never reinstate an old host's credential after a concurrent switch.
+        CloudVoiceProviderGuard.mutex.withLock {
+            val legacy = prefs.voxtral.apiKey.get().trim()
+            if (legacy.isEmpty()) return@withLock
+            // Do not erase the only recoverable copy until encrypted storage
+            // confirms a durable write. A failed migration is safe to retry.
+            val persisted = runCatching {
+                voxtralSecretsStore.hasApiKey() || voxtralSecretsStore.setApiKeyDurably(legacy)
+            }.getOrDefault(false)
+            if (persisted) prefs.voxtral.apiKey.set("").getOrThrow()
         }
-        scope.launch { prefs.voxtral.apiKey.set("") }
     }
 
     fun isLocalSelected(): Boolean = resolveTranscriptionBackend() == TranscriptionBackend.ORUKEET
