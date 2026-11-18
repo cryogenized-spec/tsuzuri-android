@@ -74,12 +74,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -107,7 +109,9 @@ import dev.patrickgold.florisboard.lib.observeAsTransformingState
 import dev.patrickgold.florisboard.lib.util.NetworkUtils
 import dev.patrickgold.jetpref.datastore.model.collectAsState
 import java.time.Instant
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import org.florisboard.lib.android.AndroidKeyguardManager
 import org.florisboard.lib.android.AndroidVersion
@@ -280,8 +284,8 @@ fun ClipboardInputLayout(
             ),
         ) {
             if (item.type == ItemType.IMAGE) {
-                val bitmap = remember(item.uri) {
-                    runCatching {
+                val bitmap by produceState<Result<ImageBitmap>?>(initialValue = null, key1 = item.uri) {
+                    value = withContext(Dispatchers.IO) { runCatching {
                         // Only app-owned media may be opened from Tsuzuri private storage.
                         // A malformed or legacy history URI must not crash composition.
                         val uri = requireNotNull(item.uri)
@@ -298,24 +302,25 @@ fun ClipboardInputLayout(
                             inSampleSize = ClipboardThumbnailSizing.sampleSize(bounds.outWidth, bounds.outHeight)
                         }
                         checkNotNull(BitmapFactory.decodeFile(file.absolutePath, options)).asImageBitmap()
-                    }
+                    } }
                 }
-                if (bitmap.isSuccess) {
+                val rendered = bitmap?.getOrNull()
+                if (rendered != null) {
                     Image(
                         modifier = Modifier.fillMaxWidth(),
-                        bitmap = bitmap.getOrThrow(),
+                        bitmap = rendered,
                         contentDescription = null,
                         contentScale = ContentScale.FillWidth,
                     )
-                } else {
+                } else if (bitmap != null) {
                     SnyggText(
                         modifier = Modifier.fillMaxWidth(),
                         text = "Preview unavailable",
                     )
                 }
             } else if (item.type == ItemType.VIDEO) {
-                val bitmap = remember(item.uri) {
-                    runCatching {
+                val bitmap by produceState<Result<ImageBitmap>?>(initialValue = null, key1 = item.uri) {
+                    value = withContext(Dispatchers.IO) { runCatching {
                         val uri = requireNotNull(item.uri)
                         check(uri.authority == ClipboardMediaProvider.AUTHORITY)
                         val id = ContentUris.parseId(uri)
@@ -332,12 +337,13 @@ fun ClipboardInputLayout(
                             ThumbnailUtils.createVideoThumbnail(file.absolutePath, MediaStore.Video.Thumbnails.MINI_KIND)
                         }
                         checkNotNull(rawBitmap).asImageBitmap()
-                    }
+                    } }
                 }
-                if (bitmap.isSuccess) {
+                val rendered = bitmap?.getOrNull()
+                if (rendered != null) {
                     Image(
                         modifier = Modifier.fillMaxWidth(),
-                        bitmap = bitmap.getOrThrow(),
+                        bitmap = rendered,
                         contentDescription = null,
                         contentScale = ContentScale.FillWidth,
                     )
@@ -350,7 +356,7 @@ fun ClipboardInputLayout(
                         contentDescription = null,
                         tint = Color.Black,
                     )
-                } else {
+                } else if (bitmap != null) {
                     SnyggText(
                         modifier = Modifier.fillMaxWidth(),
                         text = "Preview unavailable",
