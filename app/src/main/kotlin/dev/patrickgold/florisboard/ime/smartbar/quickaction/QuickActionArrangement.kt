@@ -65,21 +65,24 @@ data class QuickActionArrangement(
     }
 
     companion object {
+        // Alpha defaults put clipboard access one tap away, even when the
+        // suggestion strip is showing. Voice and AI remain optional actions.
         val OwnkeyDefaultTopBarActions = listOf(
-            QuickAction.InsertKey(TextKeyData.AI_REWRITE),
             QuickAction.InsertKey(TextKeyData.UNDO),
-            QuickAction.InsertKey(TextKeyData.CLIPBOARD_SELECT_ALL),
             QuickAction.InsertKey(TextKeyData.CLIPBOARD_COPY),
-            QuickAction.InsertKey(TextKeyData.IME_UI_MODE_CLIPBOARD),
+            QuickAction.InsertKey(TextKeyData.CLIPBOARD_PASTE),
+            QuickAction.InsertKey(TextKeyData.CLIPBOARD_SELECT_ALL),
+            QuickAction.InsertKey(TextKeyData.VOICE_INPUT),
             QuickAction.InsertKey(TextKeyData.IME_UI_MODE_MEDIA),
         )
 
         val Default = QuickActionArrangement(
-            stickyAction = QuickAction.InsertKey(TextKeyData.VOICE_INPUT),
+            stickyAction = QuickAction.InsertKey(TextKeyData.IME_UI_MODE_CLIPBOARD),
             // Keep overflow-capable actions after the six core pill actions. The row renders
             // from the start of dynamicActions, while the overflow panel reads hidden-by-width
             // actions from the end of dynamicActions.
             dynamicActions = OwnkeyDefaultTopBarActions + listOf(
+                QuickAction.InsertKey(TextKeyData.AI_REWRITE),
                 QuickAction.InsertKey(TextKeyData.SETTINGS),
                 QuickAction.InsertKey(TextKeyData.TOGGLE_COMPACT_LAYOUT),
                 QuickAction.InsertKey(TextKeyData.REDO),
@@ -94,7 +97,6 @@ data class QuickActionArrangement(
                 QuickAction.InsertKey(TextKeyData.TOGGLE_RESIZE_MODE),
                 QuickAction.InsertKey(TextKeyData.CLIPBOARD_CLEAR_PRIMARY_CLIP),
                 QuickAction.InsertKey(TextKeyData.CLIPBOARD_CUT),
-                QuickAction.InsertKey(TextKeyData.CLIPBOARD_PASTE),
                 QuickAction.InsertKey(TextKeyData.LANGUAGE_SWITCH),
                 QuickAction.InsertKey(TextKeyData.FORWARD_DELETE),
                 QuickAction.InsertKey(TextKeyData.IME_HIDE_UI),
