@@ -275,7 +275,10 @@ fun ClipboardInputLayout(
                     popupItem = item
                 },
                 onClick = {
-                    clipboardManager.pasteItem(item)
+                    val pasted = clipboardManager.pasteItem(item)
+                    if (pasted && prefs.clipboard.historyHideOnPaste.get()) {
+                        keyboardManager.activeState.imeUiMode = ImeUiMode.TEXT
+                    }
                 },
             ),
         ) {
@@ -540,8 +543,11 @@ fun ClipboardInputLayout(
                                 icon = Icons.Outlined.ContentPasteGo,
                                 text = stringRes(R.string.clip__paste_item),
                             ) {
-                                clipboardManager.pasteItem(popupItem!!)
+                                val pasted = clipboardManager.pasteItem(popupItem!!)
                                 popupItem = null
+                                if (pasted && prefs.clipboard.historyHideOnPaste.get()) {
+                                    keyboardManager.activeState.imeUiMode = ImeUiMode.TEXT
+                                }
                             }
                         }
                     }

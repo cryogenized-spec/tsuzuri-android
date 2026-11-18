@@ -167,7 +167,7 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         )
         val historyHideOnPaste = boolean(
             key = "clipboard__history_hide_on_paste",
-            default = false,
+            default = true,
         )
         val historyHideOnNextTextField = boolean(
             key = "clipboard__history_hide_on_next_text_field",

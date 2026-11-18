@@ -241,7 +241,6 @@ private fun PreferenceUiScope<FlorisPreferenceModel>.HiddenClipboardHistoryRows(
         clipboard.historyHideOnPaste,
         title = stringRes(R.string.pref__clipboard__history_hide_on_paste__label),
         enabledIf = { clipboard.historyEnabled isEqualTo true },
-        visibleIf = { clipboard.historyHideOnPaste isNotEqualTo clipboard.historyHideOnPaste.default },
     )
     SwitchPreference(
         clipboard.historyHideOnNextTextField,
