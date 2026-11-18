@@ -30,6 +30,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -71,6 +72,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
@@ -283,8 +285,13 @@ fun ClipboardInputLayout(
                 },
             ),
         ) {
-            if (item.type == ItemType.IMAGE) {
-                val bitmap by produceState<Result<ImageBitmap>?>(initialValue = null, key1 = item.uri) {
+            if (item.type == ItemType.IMAGE || item.type == ItemType.VIDEO) {
+                // A positional grid cell may be reassigned while decoding. Force
+                // a fresh state slot for each URI and reserve a stable tile size.
+                key(item.type, item.uri) {
+                    Box(modifier = Modifier.fillMaxWidth().height(140.dp)) {
+                        if (item.type == ItemType.IMAGE) {
+                val bitmap by produceState<Result<ClipboardPreviewFrame<ImageBitmap>>?>(initialValue = null, key1 = item.uri) {
                     value = withContext(Dispatchers.IO) { runCatching {
                         // Only app-owned media may be opened from Tsuzuri private storage.
                         // A malformed or legacy history URI must not crash composition.
@@ -301,16 +308,16 @@ fun ClipboardInputLayout(
                         val options = BitmapFactory.Options().apply {
                             inSampleSize = ClipboardThumbnailSizing.sampleSize(bounds.outWidth, bounds.outHeight)
                         }
-                        checkNotNull(BitmapFactory.decodeFile(file.absolutePath, options)).asImageBitmap()
+                        ClipboardPreviewFrame(uri.toString(), checkNotNull(BitmapFactory.decodeFile(file.absolutePath, options)).asImageBitmap())
                     } }
                 }
-                val rendered = bitmap?.getOrNull()
+                val rendered = bitmap?.getOrNull()?.visibleFor(item.uri?.toString())
                 if (rendered != null) {
                     Image(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxSize(),
                         bitmap = rendered,
                         contentDescription = null,
-                        contentScale = ContentScale.FillWidth,
+                        contentScale = ContentScale.Fit,
                     )
                 } else if (bitmap != null) {
                     SnyggText(
@@ -318,8 +325,8 @@ fun ClipboardInputLayout(
                         text = "Preview unavailable",
                     )
                 }
-            } else if (item.type == ItemType.VIDEO) {
-                val bitmap by produceState<Result<ImageBitmap>?>(initialValue = null, key1 = item.uri) {
+                        } else {
+                val bitmap by produceState<Result<ClipboardPreviewFrame<ImageBitmap>>?>(initialValue = null, key1 = item.uri) {
                     value = withContext(Dispatchers.IO) { runCatching {
                         val uri = requireNotNull(item.uri)
                         check(uri.authority == ClipboardMediaProvider.AUTHORITY)
@@ -336,16 +343,16 @@ fun ClipboardInputLayout(
                             @Suppress("DEPRECATION")
                             ThumbnailUtils.createVideoThumbnail(file.absolutePath, MediaStore.Video.Thumbnails.MINI_KIND)
                         }
-                        checkNotNull(rawBitmap).asImageBitmap()
+                        ClipboardPreviewFrame(uri.toString(), checkNotNull(rawBitmap).asImageBitmap())
                     } }
                 }
-                val rendered = bitmap?.getOrNull()
+                val rendered = bitmap?.getOrNull()?.visibleFor(item.uri?.toString())
                 if (rendered != null) {
                     Image(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxSize(),
                         bitmap = rendered,
                         contentDescription = null,
-                        contentScale = ContentScale.FillWidth,
+                        contentScale = ContentScale.Fit,
                     )
                     Icon(
                         modifier = Modifier
@@ -361,6 +368,9 @@ fun ClipboardInputLayout(
                         modifier = Modifier.fillMaxWidth(),
                         text = "Preview unavailable",
                     )
+                }
+                        }
+                    }
                 }
             } else {
                 val text = item.stringRepresentation()
