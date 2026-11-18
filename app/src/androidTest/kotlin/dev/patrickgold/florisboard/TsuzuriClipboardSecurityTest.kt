@@ -190,7 +190,7 @@ class TsuzuriClipboardSecurityTest {
             val pinned = dbRows.single { it.isPinned }
             val unpinned = dbRows.single { !it.isPinned }
             assertTrue(manager.deleteClipAwait(unpinned, onlyIfUnpinned = true))
-            val file = ClipboardFileStorage.getFileForId(context, ContentUris.parseId(shared))
+            val file = ClipboardFileStorage.getFileForId(context, ContentUris.parseId(requireNotNull(shared)))
             assertTrue("Pinned row must retain media", file.exists())
             assertTrue(db.clipboardItemDao().getAll().any { it.id == pinned.id })
             assertTrue(manager.deleteClipAwait(pinned, onlyIfUnpinned = false))
