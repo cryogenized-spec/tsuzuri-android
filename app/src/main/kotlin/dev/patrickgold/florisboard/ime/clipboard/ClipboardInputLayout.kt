@@ -291,84 +291,84 @@ fun ClipboardInputLayout(
                 key(item.type, item.uri) {
                     Box(modifier = Modifier.fillMaxWidth().height(140.dp)) {
                         if (item.type == ItemType.IMAGE) {
-                val bitmap by produceState<Result<ClipboardPreviewFrame<ImageBitmap>>?>(initialValue = null, key1 = item.uri) {
-                    value = withContext(Dispatchers.IO) { runCatching {
-                        // Only app-owned media may be opened from Tsuzuri private storage.
-                        // A malformed or legacy history URI must not crash composition.
-                        val uri = requireNotNull(item.uri)
-                        check(uri.authority == ClipboardMediaProvider.AUTHORITY)
-                        val id = ContentUris.parseId(uri)
-                        val file = ClipboardFileStorage.getFileForId(context, id)
-                        check(file.isFile)
+                            val bitmap by produceState<Result<ClipboardPreviewFrame<ImageBitmap>>?>(initialValue = null, key1 = item.uri) {
+                                value = withContext(Dispatchers.IO) { runCatching {
+                                    // Only app-owned media may be opened from Tsuzuri private storage.
+                                    // A malformed or legacy history URI must not crash composition.
+                                    val uri = requireNotNull(item.uri)
+                                    check(uri.authority == ClipboardMediaProvider.AUTHORITY)
+                                    val id = ContentUris.parseId(uri)
+                                    val file = ClipboardFileStorage.getFileForId(context, id)
+                                    check(file.isFile)
 
-                        // Never decode a camera-resolution image into the keyboard UI.
-                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                        BitmapFactory.decodeFile(file.absolutePath, bounds)
-                        check(bounds.outWidth > 0 && bounds.outHeight > 0)
-                        val options = BitmapFactory.Options().apply {
-                            inSampleSize = ClipboardThumbnailSizing.sampleSize(bounds.outWidth, bounds.outHeight)
-                        }
-                        ClipboardPreviewFrame(uri.toString(), checkNotNull(BitmapFactory.decodeFile(file.absolutePath, options)).asImageBitmap())
-                    } }
-                }
-                val rendered = bitmap?.getOrNull()?.visibleFor(item.uri?.toString())
-                if (rendered != null) {
-                    Image(
-                        modifier = Modifier.fillMaxSize(),
-                        bitmap = rendered,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                    )
-                } else if (bitmap != null) {
-                    SnyggText(
-                        modifier = Modifier.fillMaxWidth(),
-                        text = "Preview unavailable",
-                    )
-                }
+                                    // Never decode a camera-resolution image into the keyboard UI.
+                                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                    BitmapFactory.decodeFile(file.absolutePath, bounds)
+                                    check(bounds.outWidth > 0 && bounds.outHeight > 0)
+                                    val options = BitmapFactory.Options().apply {
+                                        inSampleSize = ClipboardThumbnailSizing.sampleSize(bounds.outWidth, bounds.outHeight)
+                                    }
+                                    ClipboardPreviewFrame(uri.toString(), checkNotNull(BitmapFactory.decodeFile(file.absolutePath, options)).asImageBitmap())
+                                } }
+                            }
+                            val rendered = bitmap?.getOrNull()?.visibleFor(item.uri?.toString())
+                            if (rendered != null) {
+                                Image(
+                                    modifier = Modifier.fillMaxSize(),
+                                    bitmap = rendered,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Fit,
+                                )
+                            } else if (bitmap != null) {
+                                SnyggText(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    text = "Preview unavailable",
+                                )
+                            }
                         } else {
-                val bitmap by produceState<Result<ClipboardPreviewFrame<ImageBitmap>>?>(initialValue = null, key1 = item.uri) {
-                    value = withContext(Dispatchers.IO) { runCatching {
-                        val uri = requireNotNull(item.uri)
-                        check(uri.authority == ClipboardMediaProvider.AUTHORITY)
-                        val id = ContentUris.parseId(uri)
-                        val file = ClipboardFileStorage.getFileForId(context, id)
-                        check(file.isFile)
-                        val rawBitmap = if (AndroidVersion.ATLEAST_API29_Q) {
-                            ThumbnailUtils.createVideoThumbnail(
-                                file,
-                                Size(ClipboardThumbnailSizing.MAX_DIMENSION_PX, ClipboardThumbnailSizing.MAX_DIMENSION_PX),
-                                null,
-                            )
-                        } else {
-                            @Suppress("DEPRECATION")
-                            ThumbnailUtils.createVideoThumbnail(file.absolutePath, MediaStore.Video.Thumbnails.MINI_KIND)
-                        }
-                        ClipboardPreviewFrame(uri.toString(), checkNotNull(rawBitmap).asImageBitmap())
-                    } }
-                }
-                val rendered = bitmap?.getOrNull()?.visibleFor(item.uri?.toString())
-                if (rendered != null) {
-                    Image(
-                        modifier = Modifier.fillMaxSize(),
-                        bitmap = rendered,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                    )
-                    Icon(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(start = 4.dp, bottom = 4.dp)
-                            .background(Color.White, CircleShape),
-                        imageVector = Icons.Default.Videocam,
-                        contentDescription = null,
-                        tint = Color.Black,
-                    )
-                } else if (bitmap != null) {
-                    SnyggText(
-                        modifier = Modifier.fillMaxWidth(),
-                        text = "Preview unavailable",
-                    )
-                }
+                            val bitmap by produceState<Result<ClipboardPreviewFrame<ImageBitmap>>?>(initialValue = null, key1 = item.uri) {
+                                value = withContext(Dispatchers.IO) { runCatching {
+                                    val uri = requireNotNull(item.uri)
+                                    check(uri.authority == ClipboardMediaProvider.AUTHORITY)
+                                    val id = ContentUris.parseId(uri)
+                                    val file = ClipboardFileStorage.getFileForId(context, id)
+                                    check(file.isFile)
+                                    val rawBitmap = if (AndroidVersion.ATLEAST_API29_Q) {
+                                        ThumbnailUtils.createVideoThumbnail(
+                                            file,
+                                            Size(ClipboardThumbnailSizing.MAX_DIMENSION_PX, ClipboardThumbnailSizing.MAX_DIMENSION_PX),
+                                            null,
+                                        )
+                                    } else {
+                                        @Suppress("DEPRECATION")
+                                        ThumbnailUtils.createVideoThumbnail(file.absolutePath, MediaStore.Video.Thumbnails.MINI_KIND)
+                                    }
+                                    ClipboardPreviewFrame(uri.toString(), checkNotNull(rawBitmap).asImageBitmap())
+                                } }
+                            }
+                            val rendered = bitmap?.getOrNull()?.visibleFor(item.uri?.toString())
+                            if (rendered != null) {
+                                Image(
+                                    modifier = Modifier.fillMaxSize(),
+                                    bitmap = rendered,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Fit,
+                                )
+                                Icon(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(start = 4.dp, bottom = 4.dp)
+                                        .background(Color.White, CircleShape),
+                                    imageVector = Icons.Default.Videocam,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                )
+                            } else if (bitmap != null) {
+                                SnyggText(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    text = "Preview unavailable",
+                                )
+                            }
                         }
                     }
                 }
@@ -415,7 +415,7 @@ fun ClipboardInputLayout(
                     item(key, span = StaggeredGridItemSpan.FullLine) {
                         ClipCategoryTitle(text = stringRes(title))
                     }
-                    items(items) { item ->
+                    items(items, key = { it.id }) { item ->
                         ClipItemView(
                             elementName = FlorisImeUi.ClipboardItem.elementName,
                             item = item,
