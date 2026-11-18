@@ -286,8 +286,8 @@ fun ClipboardInputLayout(
             ),
         ) {
             if (item.type == ItemType.IMAGE || item.type == ItemType.VIDEO) {
-                // A positional grid cell may be reassigned while decoding. Force
-                // a fresh state slot for each URI and reserve a stable tile size.
+                // Even if rows are replaced or repositioned mid-decode, recreate
+                // the preview slot for its URI and reserve a stable tile size.
                 key(item.type, item.uri) {
                     Box(modifier = Modifier.fillMaxWidth().height(140.dp)) {
                         if (item.type == ItemType.IMAGE) {
