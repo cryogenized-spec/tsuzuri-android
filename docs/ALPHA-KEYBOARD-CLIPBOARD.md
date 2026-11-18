@@ -5,9 +5,9 @@
 ## Get the APK without Android Studio or an SSD
 
 1. Open [Tsuzuri GitHub Actions](https://github.com/cryogenized-spec/tsuzuri-android/actions/workflows/android.yml) and select the latest **successful** Android strict quality-gate run for `feat/tsuzuri-clipboard-alpha`.
-2. Download the `tsuzuri-debug-apks` artifact. Unzip it and choose the **app-debug.apk** application package, not `app-debug-androidTest.apk` (the latter runs instrumentation tests). GitHub may require signing in to download artifacts.
-3. Move `app-debug.apk` to your Android phone and install it. Android may prompt you to permit installation from the app you used to open the APK.
-4. Open Tsuzuri. In Android Settings, enable Tsuzuri under **System → Languages & input → On-screen keyboard / Keyboard list** (exact labels vary by manufacturer). Switch your default keyboard to Tsuzuri using the keyboard picker.
+2. On a normal modern ARM64 Android phone, download the **`tsuzuri-alpha-arm64-phone-apk`** artifact. Extract **`app-arm64-v8a-debug.apk`** and install that APK. GitHub may require signing in to download Actions artifacts.
+3. If your phone requires another ABI, download `tsuzuri-debug-apks` and select **`app-armeabi-v7a-debug.apk`** for 32-bit ARM. The **x86** and **x86_64** APKs are mainly for emulators, not ordinary phones. A phone connected by ADB can report supported architectures with `adb shell getprop ro.product.cpu.abilist`. Do **not** install the `androidTest` test-runner APK.
+4. Android may prompt you to permit installation from the app you used to open the APK. Open Tsuzuri. In Android Settings, enable Tsuzuri under **System → Languages & input → On-screen keyboard / Keyboard list** (labels vary by manufacturer), then select it using the keyboard picker.
 
 **Do not uninstall FUTO.** Tsuzuri uses its own debug application ID and should coexist with your existing keyboard; switch back from Android's keyboard picker if the alpha does not meet your needs. FUTO's private dictionary and clipboard history are not imported automatically.
 
