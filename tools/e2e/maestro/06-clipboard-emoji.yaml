@@ -1,6 +1,6 @@
 # Clipboard & emoji: a switch that reveals its slider, the skin tone sheet, and the
 # Clear emoji history confirm (cancelled).
-appId: nl.bartvandermeeren.ownkey.debug
+appId: io.github.cryogenizedspec.tsuzuri.debug
 name: 06 Clipboard and emoji
 tags: [settings, clipboard]
 ---

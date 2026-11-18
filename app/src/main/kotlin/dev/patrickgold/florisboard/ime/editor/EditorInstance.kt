@@ -519,8 +519,10 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
                     InputConnectionCompat.commitContent(ic, activeInfo.base, inputContentInfo, flags, null)
                 }.getOrDefault(false)
             }
-        }.also {
-            if (prefs.clipboard.historyHideOnPaste.get()) {
+        }.also { pasted ->
+            // Keep the clipboard open if the editor rejected the content.
+            // All paste paths, including the quick action, share this rule.
+            if (pasted && prefs.clipboard.historyHideOnPaste.get()) {
                 keyboardManager.activeState.imeUiMode = ImeUiMode.TEXT
             }
         }
