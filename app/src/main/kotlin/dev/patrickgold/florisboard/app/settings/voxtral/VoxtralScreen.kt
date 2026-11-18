@@ -579,10 +579,7 @@ fun VoxtralScreen() = FlorisScreen {
                             label = "Enter another model ID",
                             summary = "Older or provider-specific model",
                             selected = false,
-                            onClick = {
-                                hide()
-                                panel = AiPanel.RewriteCustomModel
-                            },
+                            onClick = { panel = AiPanel.RewriteCustomModel },
                             modifier = Modifier.testTag("ai-rewrite-custom-model"),
                         )
                     }
