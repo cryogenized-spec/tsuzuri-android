@@ -4,47 +4,38 @@
  */
 package dev.patrickgold.florisboard.ime.clipboard
 
+import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Test
 
-class ClipboardPreviewFrameTest {
-    private val firstUri = "content://tsuzuri.provider.clipboard/clips/images/123"
-    private val secondUri = "content://tsuzuri.provider.clipboard/clips/images/456"
+class ClipboardPreviewFrameTest : FunSpec({
+    val firstUri = "content://tsuzuri.provider.clipboard/clips/images/123"
+    val secondUri = "content://tsuzuri.provider.clipboard/clips/images/456"
 
-    @Test
-    fun recycledTileDoesNotShowPreviouslyLoadedImage() {
-        val previouslyLoaded = ClipboardPreviewFrame(firstUri, "picture A")
-        assertEquals("picture A", previouslyLoaded.visibleFor(firstUri))
-        // Position-based history cells are reused when a clip is replaced.
-        // A stale frame must be invisible even before the new decode finishes.
-        assertNull(previouslyLoaded.visibleFor(secondUri))
-        assertEquals("picture B", ClipboardPreviewFrame(secondUri, "picture B").visibleFor(secondUri))
+    test("recycled tile never displays the previous image") {
+        val previous = ClipboardPreviewFrame(firstUri, "picture A")
+        previous.visibleFor(firstUri) shouldBe "picture A"
+        previous.visibleFor(secondUri) shouldBe null
+        ClipboardPreviewFrame(secondUri, "picture B").visibleFor(secondUri) shouldBe "picture B"
     }
 
-    @Test
-    fun lateDecodeAfterReorderingCannotRevealUnrelatedMedia() = runTest {
-        val delayedOldDecode = CompletableDeferred<ClipboardPreviewFrame<String>>()
-        var visible: String? = null
-        val currentItem = secondUri
-        val oldJob = launch {
-            visible = delayedOldDecode.await().visibleFor(currentItem)
+    test("late decode and cancellation never reveal unrelated media") {
+        runTest {
+            val delayedOldDecode = CompletableDeferred<ClipboardPreviewFrame<String>>()
+            var visible: String? = null
+            val currentItem = secondUri
+            val oldJob = launch {
+                visible = delayedOldDecode.await().visibleFor(currentItem)
+            }
+            oldJob.cancelAndJoin()
+            delayedOldDecode.complete(ClipboardPreviewFrame(firstUri, "picture A"))
+            visible shouldBe null
+            // If an old result races with cancellation, the URI check hides it.
+            delayedOldDecode.await().visibleFor(currentItem) shouldBe null
+            ClipboardPreviewFrame(secondUri, "picture B").visibleFor(currentItem) shouldBe "picture B"
         }
-        // A cancelled producer should never commit its now-superseded result.
-        oldJob.cancelAndJoin()
-        delayedOldDecode.complete(ClipboardPreviewFrame(firstUri, "picture A"))
-        assertNull(visible)
-
-        // The URI check also protects against a result that races with the
-        // cancellation boundary and reaches the tile after it has been reused.
-        val lateOldResult = delayedOldDecode.await()
-        assertNull(lateOldResult.visibleFor(currentItem))
-
-        val newResult = ClipboardPreviewFrame(secondUri, "picture B")
-        assertEquals("picture B", newResult.visibleFor(currentItem))
     }
-}
+})
