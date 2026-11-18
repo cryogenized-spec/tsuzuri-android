@@ -169,14 +169,22 @@ fun SymbolShortcutScreen() = FlorisScreen {
                 )
             }
             for (rowKeys in layoutRows.orEmpty()) {
+                // QWERTY, AZERTY and similar rows must fit at once, like the
+                // physical touchscreen keyboard. Only unusually dense rows
+                // can scroll, avoiding impossibly small touch areas.
+                val wideRow = rowKeys.size > 11
                 Row(
-                    modifier = Modifier.fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, vertical = 3.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = if (wideRow) {
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    } else {
+                        Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 3.dp)
+                    },
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     for (letter in rowKeys) {
-                        val modifier = Modifier.width(44.dp).height(48.dp)
+                        val modifier = (if (wideRow) Modifier.width(44.dp) else Modifier.weight(1f))
+                            .height(48.dp)
                             .testTag("unicode-key-$letter")
                         if (selectedKey == letter) {
                             Button(
