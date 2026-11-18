@@ -175,7 +175,7 @@ fun VoxtralScreen() = FlorisScreen {
                     // The plain-text key is only cleared once the encrypted store holds a key; dictation reads
                     // the legacy one until then.
                     val moved = runCatching {
-                        if (!voxtralSecretsStore.hasApiKey()) voxtralSecretsStore.setApiKey(legacyApiKey)
+                        voxtralSecretsStore.hasApiKey() || voxtralSecretsStore.setApiKeyDurably(legacyApiKey)
                     }.isSuccess
                     if (moved) prefsRef.voxtral.apiKey.set("")
                 }
@@ -353,7 +353,7 @@ fun VoxtralScreen() = FlorisScreen {
                             }
                             val change = withContext(Dispatchers.IO) {
                                 val saved = voiceSwitcher.editKeyForHost(expectedKeyEndpoint) {
-                                    runCatching { voxtralSecretsStore.setApiKey(key) }.isSuccess
+                                    runCatching { voxtralSecretsStore.setApiKeyDurably(key) }.getOrDefault(false)
                                 }
                                 AiSettings.apiKeySaved(saved, readKey { voxtralSecretsStore.hasApiKey() })
                             }
