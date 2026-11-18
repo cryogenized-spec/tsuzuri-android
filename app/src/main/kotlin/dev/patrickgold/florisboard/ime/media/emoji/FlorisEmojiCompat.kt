@@ -91,6 +91,10 @@ object FlorisEmojiCompat {
         return instanceFlow
     }
 
+    // Upstream requires two independent instances with different replacement policies.
+    // This is the sole intentional use of EmojiCompat's library-restricted reset API.
+    // Keep the exception scoped to the compatibility adapter, not the whole app.
+    @SuppressLint("RestrictedApi")
     private class InstanceHandler(context: Context, replaceAll: Boolean = false) {
         private val initCallback: EmojiCompat.InitCallback = object : EmojiCompat.InitCallback() {
             override fun onInitialized() {
