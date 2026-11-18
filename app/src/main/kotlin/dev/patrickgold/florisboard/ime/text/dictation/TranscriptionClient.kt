@@ -278,7 +278,11 @@ class VoxtralRelayTranscriptionClient(
             DataOutputStream(connection.outputStream).use { out ->
                 out.writeMultipartField(boundary, "model", preparedRequest.model)
                 if (!preparedRequest.languageHint.isNullOrBlank()) {
-                    out.writeMultipartField(boundary, "language", preparedRequest.languageHint)
+                    out.writeMultipartField(
+                        boundary,
+                        TranscriptionMultipartFields.languageField(preparedRequest.endpointUrl, preparedRequest.model),
+                        preparedRequest.languageHint,
+                    )
                 }
                 when (preparedRequest.vocabularyField) {
                     CloudVocabularyField.NONE -> Unit

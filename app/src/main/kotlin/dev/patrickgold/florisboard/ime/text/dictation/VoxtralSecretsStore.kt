@@ -61,7 +61,27 @@ class VoxtralSecretsStore(
         }
     }
 
+    /**
+     * UI saves must survive process death before the user is told they worked.
+     * Call only from Dispatchers.IO, never the main thread.
+     */
+    fun setApiKeyDurably(apiKey: String): Boolean {
+        val value = apiKey.trim()
+        val editor = encryptedPrefs.edit()
+        if (value.isEmpty()) editor.remove(KEY_API_KEY) else editor.putString(KEY_API_KEY, value)
+        return editor.commit()
+    }
+
     fun clearApiKey() {
         encryptedPrefs.edit().remove(KEY_API_KEY).apply()
     }
+
+    /**
+     * Provider-host switches must durably erase the old key before saving the new host.
+     * SharedPreferences.apply() changes only the in-memory state immediately and cannot
+     * detect persistence failures; commit() reports the durable disk write result.
+     * Call this on Dispatchers.IO, not the main thread.
+     */
+    fun clearApiKeyDurably(): Boolean =
+        encryptedPrefs.edit().remove(KEY_API_KEY).commit()
 }
