@@ -22,6 +22,7 @@ object CloudVoiceProviderGuard {
 
 class CloudVoiceProviderSwitcher(
     private val currentEndpoint: suspend () -> String,
+    private val currentModel: suspend () -> String,
     private val durablyEraseKey: suspend () -> Boolean,
     private val clearLegacyKey: suspend () -> Unit,
     private val updateEndpoint: suspend (String) -> Unit,
@@ -32,19 +33,72 @@ class CloudVoiceProviderSwitcher(
     sealed interface SwitchResult {
         data class Applied(val keyCleared: Boolean) : SwitchResult
         data object KeyDeletionFailed : SwitchResult
+        data class SettingsUpdateFailed(
+            val keyCleared: Boolean,
+            val restoredPreviousSettings: Boolean,
+        ) : SwitchResult
     }
 
+    /**
+     * Only sessions that take CloudVoiceProviderGuard.mutex observe the provider
+     * as an atomic endpoint/model pair. The underlying preferences are separate,
+     * so compensate for failed writes before releasing that lock.
+     * Even after a failed cross-host update the previous key stays deleted.
+     */
     suspend fun switchTo(endpoint: String, model: String): SwitchResult = mutex.withLock {
-        val oldEndpoint = currentEndpoint()
+        val oldEndpoint: String
+        val oldModel: String
+        try {
+            oldEndpoint = currentEndpoint()
+            oldModel = currentModel()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return@withLock SwitchResult.SettingsUpdateFailed(
+                keyCleared = false, restoredPreviousSettings = false,
+            )
+        }
         val crossHost = CloudTranscriptionPresets.mustClearApiKey(oldEndpoint, endpoint)
         if (crossHost) {
-            // Failure must leave the previous endpoint untouched.
-            if (!durablyEraseKey()) return@withLock SwitchResult.KeyDeletionFailed
-            clearLegacyKey()
+            val erased = try {
+                durablyEraseKey()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+            if (!erased) return@withLock SwitchResult.KeyDeletionFailed
+            try {
+                clearLegacyKey()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Fail closed: never publish a new host if a legacy key might persist.
+                return@withLock SwitchResult.KeyDeletionFailed
+            }
         }
-        updateEndpoint(endpoint)
-        updateModel(model)
-        SwitchResult.Applied(keyCleared = crossHost)
+        try {
+            // Publish the endpoint last; session snapshots cannot see partial
+            // state because they share this process-wide mutex.
+            updateModel(model)
+            updateEndpoint(endpoint)
+            SwitchResult.Applied(keyCleared = crossHost)
+        } catch (failure: Exception) {
+            // Roll back even if the caller was cancelled during the first write.
+            // A persistence outage can defeat compensation; surface this rather
+            // than claiming that the previous settings were restored.
+            val restored = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                var ok = true
+                try { updateModel(oldModel) } catch (_: Exception) { ok = false }
+                try { updateEndpoint(oldEndpoint) } catch (_: Exception) { ok = false }
+                ok
+            }
+            if (failure is kotlinx.coroutines.CancellationException) throw failure
+            SwitchResult.SettingsUpdateFailed(
+                keyCleared = crossHost,
+                restoredPreviousSettings = restored,
+            )
+        }
     }
 
     /** Prevent stale Key-dialog completions from depositing credentials into a new host. */

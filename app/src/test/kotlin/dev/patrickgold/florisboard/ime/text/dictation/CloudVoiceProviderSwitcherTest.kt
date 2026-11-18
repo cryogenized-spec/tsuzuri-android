@@ -22,6 +22,7 @@ class CloudVoiceProviderSwitcherTest : FunSpec({
         var legacyKey = "legacy-secret"
         val switcher = CloudVoiceProviderSwitcher(
             currentEndpoint = { active },
+            currentModel = { "previous-model" },
             durablyEraseKey = { false },
             clearLegacyKey = { legacyKey = "" },
             updateEndpoint = { active = it },
@@ -40,6 +41,7 @@ class CloudVoiceProviderSwitcherTest : FunSpec({
         var durableDeletion = false
         val switcher = CloudVoiceProviderSwitcher(
             currentEndpoint = { active },
+            currentModel = { "previous-model" },
             durablyEraseKey = { durableDeletion = true; true },
             clearLegacyKey = { legacyKey = "" },
             updateEndpoint = {
@@ -61,6 +63,7 @@ class CloudVoiceProviderSwitcherTest : FunSpec({
             val unblock = CompletableDeferred<Unit>()
             val switcher = CloudVoiceProviderSwitcher(
                 currentEndpoint = { active },
+                currentModel = { "previous-model" },
                 durablyEraseKey = {
                     entered.complete(Unit)
                     unblock.await()
@@ -85,6 +88,7 @@ class CloudVoiceProviderSwitcherTest : FunSpec({
         var edited = false
         val switcher = CloudVoiceProviderSwitcher(
             currentEndpoint = { active },
+            currentModel = { "previous-model" },
             durablyEraseKey = { true },
             clearLegacyKey = {},
             updateEndpoint = { active = it },
@@ -105,6 +109,7 @@ class CloudVoiceProviderSwitcherTest : FunSpec({
             val finishErase = CompletableDeferred<Unit>()
             val switcher = CloudVoiceProviderSwitcher(
                 currentEndpoint = { active },
+                currentModel = { "previous-model" },
                 durablyEraseKey = {
                     started.complete(Unit)
                     finishErase.await()
@@ -135,6 +140,7 @@ class CloudVoiceProviderSwitcherTest : FunSpec({
             var saved = false
             val switcher = CloudVoiceProviderSwitcher(
                 currentEndpoint = { active },
+                currentModel = { "previous-model" },
                 durablyEraseKey = { true },
                 clearLegacyKey = {},
                 updateEndpoint = { active = it },
@@ -152,5 +158,84 @@ class CloudVoiceProviderSwitcherTest : FunSpec({
             saved shouldBe false
             active shouldBe groq
         }
+    }
+
+    test("model write failure leaves the old host and model selected") {
+        var active = mistral
+        var model = "old-model"
+        var keyCleared = false
+        val switcher = CloudVoiceProviderSwitcher(
+            currentEndpoint = { active }, currentModel = { model },
+            durablyEraseKey = { keyCleared = true; true },
+            clearLegacyKey = {},
+            updateEndpoint = { active = it },
+            updateModel = {
+                if (it == "whisper-large-v3-turbo") throw IllegalStateException("disk write failed")
+                model = it
+            },
+        )
+        switcher.switchTo(groq, "whisper-large-v3-turbo") shouldBe
+            CloudVoiceProviderSwitcher.SwitchResult.SettingsUpdateFailed(
+                keyCleared = true, restoredPreviousSettings = true,
+            )
+        keyCleared shouldBe true
+        active shouldBe mistral
+        model shouldBe "old-model"
+    }
+
+    test("endpoint failure after partial commit compensates both writes under shared lock") {
+        var active = mistral
+        var model = "old-model"
+        val switcher = CloudVoiceProviderSwitcher(
+            currentEndpoint = { active }, currentModel = { model },
+            durablyEraseKey = { true }, clearLegacyKey = {},
+            updateEndpoint = {
+                active = it
+                if (it == groq) throw IllegalStateException("endpoint write reported failure")
+            },
+            updateModel = { model = it },
+        )
+        switcher.switchTo(groq, "whisper-large-v3-turbo") shouldBe
+            CloudVoiceProviderSwitcher.SwitchResult.SettingsUpdateFailed(
+                keyCleared = true, restoredPreviousSettings = true,
+            )
+        active shouldBe mistral
+        model shouldBe "old-model"
+    }
+
+    test("a failed rollback is reported instead of claiming settings were restored") {
+        var active = mistral
+        var model = "old-model"
+        val switcher = CloudVoiceProviderSwitcher(
+            currentEndpoint = { active }, currentModel = { model },
+            durablyEraseKey = { true }, clearLegacyKey = {},
+            updateEndpoint = { active = it; if (it == groq) error("endpoint unavailable") },
+            updateModel = {
+                if (it == "old-model") error("rollback unavailable")
+                model = it
+            },
+        )
+        switcher.switchTo(groq, "whisper-large-v3-turbo") shouldBe
+            CloudVoiceProviderSwitcher.SwitchResult.SettingsUpdateFailed(
+                keyCleared = true, restoredPreviousSettings = false,
+            )
+        active shouldBe mistral
+        model shouldBe "whisper-large-v3-turbo"
+    }
+
+    test("legacy key deletion failure never publishes a new provider host") {
+        var active = mistral
+        var model = "old-model"
+        val switcher = CloudVoiceProviderSwitcher(
+            currentEndpoint = { active }, currentModel = { model },
+            durablyEraseKey = { true },
+            clearLegacyKey = { throw IllegalStateException("legacy write failure") },
+            updateEndpoint = { active = it },
+            updateModel = { model = it },
+        )
+        switcher.switchTo(groq, "whisper-large-v3-turbo") shouldBe
+            CloudVoiceProviderSwitcher.SwitchResult.KeyDeletionFailed
+        active shouldBe mistral
+        model shouldBe "old-model"
     }
 })
