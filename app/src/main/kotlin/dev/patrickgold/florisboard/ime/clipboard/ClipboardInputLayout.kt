@@ -18,7 +18,6 @@ package dev.patrickgold.florisboard.ime.clipboard
 
 import android.content.ContentUris
 import android.graphics.BitmapFactory
-import android.media.MediaMetadataRetriever
 import android.media.ThumbnailUtils
 import android.provider.MediaStore
 import android.util.Size
@@ -93,6 +92,7 @@ import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.clipboardManager
 import dev.patrickgold.florisboard.ime.ImeUiMode
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardFileStorage
+import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardMediaProvider
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardItem
 import dev.patrickgold.florisboard.ime.clipboard.provider.ItemType
 import dev.patrickgold.florisboard.ime.keyboard.FlorisImeSizing
@@ -280,14 +280,24 @@ fun ClipboardInputLayout(
             ),
         ) {
             if (item.type == ItemType.IMAGE) {
-                val id = ContentUris.parseId(item.uri!!)
-                val file = ClipboardFileStorage.getFileForId(context, id)
-                val bitmap = remember(id) {
+                val bitmap = remember(item.uri) {
                     runCatching {
-                        check(file.exists()) { "Unable to resolve image at ${file.absolutePath}" }
-                        val rawBitmap = BitmapFactory.decodeFile(file.absolutePath)
-                        checkNotNull(rawBitmap) { "Unable to decode image at ${file.absolutePath}" }
-                        rawBitmap.asImageBitmap()
+                        // Only app-owned media may be opened from Tsuzuri private storage.
+                        // A malformed or legacy history URI must not crash composition.
+                        val uri = requireNotNull(item.uri)
+                        check(uri.authority == ClipboardMediaProvider.AUTHORITY)
+                        val id = ContentUris.parseId(uri)
+                        val file = ClipboardFileStorage.getFileForId(context, id)
+                        check(file.isFile)
+
+                        // Never decode a camera-resolution image into the keyboard UI.
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeFile(file.absolutePath, bounds)
+                        check(bounds.outWidth > 0 && bounds.outHeight > 0)
+                        val options = BitmapFactory.Options().apply {
+                            inSampleSize = ClipboardThumbnailSizing.sampleSize(bounds.outWidth, bounds.outHeight)
+                        }
+                        checkNotNull(BitmapFactory.decodeFile(file.absolutePath, options)).asImageBitmap()
                     }
                 }
                 if (bitmap.isSuccess) {
@@ -300,27 +310,28 @@ fun ClipboardInputLayout(
                 } else {
                     SnyggText(
                         modifier = Modifier.fillMaxWidth(),
-                        text = bitmap.exceptionOrNull()?.message ?: "Unknown error",
+                        text = "Preview unavailable",
                     )
                 }
             } else if (item.type == ItemType.VIDEO) {
-                val id = ContentUris.parseId(item.uri!!)
-                val file = ClipboardFileStorage.getFileForId(context, id)
-                val bitmap = remember(id) {
+                val bitmap = remember(item.uri) {
                     runCatching {
-                        check(file.exists()) { "Unable to resolve video at ${file.absolutePath}" }
+                        val uri = requireNotNull(item.uri)
+                        check(uri.authority == ClipboardMediaProvider.AUTHORITY)
+                        val id = ContentUris.parseId(uri)
+                        val file = ClipboardFileStorage.getFileForId(context, id)
+                        check(file.isFile)
                         val rawBitmap = if (AndroidVersion.ATLEAST_API29_Q) {
-                            val dataRetriever = MediaMetadataRetriever()
-                            dataRetriever.setDataSource(file.absolutePath)
-                            val width = dataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
-                            val height = dataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
-                            ThumbnailUtils.createVideoThumbnail(file, Size(width!!.toInt(), height!!.toInt()), null)
+                            ThumbnailUtils.createVideoThumbnail(
+                                file,
+                                Size(ClipboardThumbnailSizing.MAX_DIMENSION_PX, ClipboardThumbnailSizing.MAX_DIMENSION_PX),
+                                null,
+                            )
                         } else {
                             @Suppress("DEPRECATION")
                             ThumbnailUtils.createVideoThumbnail(file.absolutePath, MediaStore.Video.Thumbnails.MINI_KIND)
                         }
-                        checkNotNull(rawBitmap) { "Unable to decode video at ${file.absolutePath}" }
-                        rawBitmap.asImageBitmap()
+                        checkNotNull(rawBitmap).asImageBitmap()
                     }
                 }
                 if (bitmap.isSuccess) {
@@ -342,7 +353,7 @@ fun ClipboardInputLayout(
                 } else {
                     SnyggText(
                         modifier = Modifier.fillMaxWidth(),
-                        text = bitmap.exceptionOrNull()?.message ?: "Unknown error",
+                        text = "Preview unavailable",
                     )
                 }
             } else {
