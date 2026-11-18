@@ -628,13 +628,13 @@ class ClipboardManager(
         }
     }
 
-    /** True only when the target editor accepted the clip. Never dismiss the
-     * clipboard panel after a rejected rich-content insertion. */
-    fun pasteItem(item: ClipboardItem): Boolean {
+    fun pasteItem(item: ClipboardItem) {
         val editorInstance by appContext.editorInstance()
-        val pasted = editorInstance.commitClipboardItem(item)
-        if (!pasted) appContext.showShortToastSync("Failed to paste item.")
-        return pasted
+        editorInstance.commitClipboardItem(item).also { result ->
+            if (!result) {
+                appContext.showShortToastSync("Failed to paste item.")
+            }
+        }
     }
 
     /**
