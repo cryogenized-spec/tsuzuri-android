@@ -218,7 +218,7 @@ fun SymbolShortcutScreen() = FlorisScreen {
                     }
                 },
             )
-            val editingEnabled by prefs.keyboard.editingShortcutsEnabled.collectPrefsAsState()
+            val editingEnabled by settingsPrefs.keyboard.editingShortcutsEnabled.collectPrefsAsState()
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -228,7 +228,7 @@ fun SymbolShortcutScreen() = FlorisScreen {
                 Switch(
                     checked = editingEnabled,
                     onCheckedChange = { enabled ->
-                        shortcutScope.launch { prefs.keyboard.editingShortcutsEnabled.set(enabled) }
+                        shortcutScope.launch { settingsPrefs.keyboard.editingShortcutsEnabled.set(enabled) }
                     },
                 )
             }
