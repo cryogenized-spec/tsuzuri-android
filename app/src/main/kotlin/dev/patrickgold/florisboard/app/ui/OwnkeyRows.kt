@@ -51,6 +51,7 @@ import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -136,6 +137,13 @@ private fun TitleValueLine(
 internal fun stacksRowValue(fontScale: Float): Boolean = fontScale >= StackedValueFontScale
 
 /**
+ * On narrow phones a long model/provider name should not compete for one line
+ * with its setting title. Desktop/tablet rows keep the familiar two-column fit.
+ */
+internal fun stacksRowValueForViewport(fontScale: Float, screenWidthDp: Int): Boolean =
+    stacksRowValue(fontScale) || (screenWidthDp in 1..420)
+
+/**
  * A title with an optional value, used by every row and the slider header. Below 150% font scale they
  * share a line where the title has priority and the value gets what it leaves, ellipsized; from 150% on
  * the value sits on its own line under the title.
@@ -162,7 +170,7 @@ internal fun OwnkeyTitleValue(
     }
     if (value == null) {
         titleText()
-    } else if (stacksRowValue(LocalDensity.current.fontScale)) {
+    } else if (stacksRowValueForViewport(LocalDensity.current.fontScale, LocalConfiguration.current.screenWidthDp)) {
         Column {
             titleText()
             Text(
