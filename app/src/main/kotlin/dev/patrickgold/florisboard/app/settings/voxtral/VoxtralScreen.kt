@@ -167,6 +167,7 @@ fun VoxtralScreen() = FlorisScreen {
         // The intended key host is fixed when the dialog opens, not read from
         // reactive endpoint state after an asynchronous preference write.
         var voiceKeyDialogEndpoint by rememberSaveable { mutableStateOf<String?>(null) }
+        var rewriteKeyDialogEndpoint by rememberSaveable { mutableStateOf<String?>(null) }
 
         // Key checks open the Keystore-backed stores and decrypt them, so they run off the main thread. The screen
         // waits for both: every route and status below depends on them. They are saveable so that coming back to
@@ -187,10 +188,25 @@ fun VoxtralScreen() = FlorisScreen {
                     }
                     readKey { voxtralSecretsStore.hasApiKey() }
                 }
-                cloudKeyPresent to readKey { llmRewriteSecretsStore.hasApiKey() }
+                val initialEndpoint = LlmRewriteProviders.resolve(
+                    prefsRef.voxtral.postProcessingProvider.get(),
+                    prefsRef.voxtral.postProcessingEndpointUrl.get(),
+                    prefsRef.voxtral.postProcessingModel.get(),
+                ).endpointUrl
+                cloudKeyPresent to readKey { llmRewriteSecretsStore.hasApiKeyForEndpoint(initialEndpoint) }
             }
             hasCloudKey = cloud
             hasRewriteKey = rewrite
+        }
+        // On every provider/host change, refresh whether the key belongs to
+        // the CURRENT destination rather than reporting an unrelated key.
+        LaunchedEffect(rewriteProviderId, rewriteEndpointUrl, rewriteModel) {
+            val destination = LlmRewriteProviders.resolve(
+                rewriteProviderId, rewriteEndpointUrl, rewriteModel,
+            ).endpointUrl
+            hasRewriteKey = withContext(Dispatchers.IO) {
+                readKey { llmRewriteSecretsStore.hasApiKeyForEndpoint(destination) }
+            }
         }
         val cloudKey = hasCloudKey
         val rewriteKey = hasRewriteKey
@@ -321,7 +337,10 @@ fun VoxtralScreen() = FlorisScreen {
                     title = stringRes(R.string.settings__ai__key__row),
                     value = keyValue(rewriteKey),
                     valueColor = warningIf(!rewriteKey),
-                    onClick = { panel = AiPanel.RewriteKey },
+                    onClick = {
+                        rewriteKeyDialogEndpoint = effectiveRewrite.endpointUrl
+                        panel = AiPanel.RewriteKey
+                    },
                     modifier = Modifier.testTag("ai-rewrite-key"),
                 )
                 val modelValue = AiSettings.rewriteModelValue(rewritePreset, rewriteModel)
@@ -575,11 +594,23 @@ fun VoxtralScreen() = FlorisScreen {
                     },
                     hasKey = rewriteKey,
                     onSave = { key ->
+                        // Freeze the intended destination at dialog open; do not
+                        // rebind an old provider's key after an async host change.
+                        val intendedEndpoint = rewriteKeyDialogEndpoint ?: effectiveRewrite.endpointUrl
                         scope.launch {
                             keyError = null
                             val change = withContext(Dispatchers.IO) {
-                                val stored = runCatching { llmRewriteSecretsStore.setApiKey(key) }.isSuccess
-                                AiSettings.apiKeySaved(stored, readKey { llmRewriteSecretsStore.hasApiKey() })
+                                val stored = runCatching {
+                                    llmRewriteSecretsStore.setApiKeyForEndpoint(key, intendedEndpoint)
+                                }.getOrDefault(false)
+                                val liveEndpoint = LlmRewriteProviders.resolve(
+                                    prefsRef.voxtral.postProcessingProvider.get(),
+                                    prefsRef.voxtral.postProcessingEndpointUrl.get(),
+                                    prefsRef.voxtral.postProcessingModel.get(),
+                                ).endpointUrl
+                                AiSettings.apiKeySaved(
+                                    stored, readKey { llmRewriteSecretsStore.hasApiKeyForEndpoint(liveEndpoint) },
+                                )
                             }
                             hasRewriteKey = change.hasKey
                             if (!change.succeeded) {
@@ -593,8 +624,18 @@ fun VoxtralScreen() = FlorisScreen {
                         scope.launch {
                             keyError = null
                             val change = withContext(Dispatchers.IO) {
-                                runCatching { llmRewriteSecretsStore.clearApiKey() }
-                                AiSettings.apiKeyRemoved(readKey { llmRewriteSecretsStore.hasApiKey() })
+                                val removed = runCatching {
+                                    llmRewriteSecretsStore.clearApiKeyDurably()
+                                }.getOrDefault(false)
+                                val liveEndpoint = LlmRewriteProviders.resolve(
+                                    prefsRef.voxtral.postProcessingProvider.get(),
+                                    prefsRef.voxtral.postProcessingEndpointUrl.get(),
+                                    prefsRef.voxtral.postProcessingModel.get(),
+                                ).endpointUrl
+                                val hasAfter = readKey {
+                                    llmRewriteSecretsStore.hasApiKeyForEndpoint(liveEndpoint)
+                                }
+                                ApiKeyChange(hasKey = hasAfter, succeeded = removed && !hasAfter)
                             }
                             hasRewriteKey = change.hasKey
                             if (!change.succeeded) {

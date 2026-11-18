@@ -26,7 +26,8 @@ class LlmRewriteSecretsStore(
 ) {
     companion object {
         private const val FILE_NAME = "llm-rewrite-secrets"
-        private const val KEY_API_KEY = "llm_rewrite_api_key"
+        private const val KEY_API_KEY = "llm_rewrite_api_key" // legacy, deliberately not used for requests
+        private const val KEY_BOUND_API_KEY = "llm_rewrite_bound_api_key_v1"
     }
 
     private val appContext = context.applicationContext
@@ -44,24 +45,25 @@ class LlmRewriteSecretsStore(
         )
     }
 
-    fun getApiKey(): String {
-        return encryptedPrefs.getString(KEY_API_KEY, "").orEmpty()
+    /** A key saved without an associated host must not be reused for any provider. */
+    fun getApiKeyForEndpoint(endpoint: String): String =
+        RewriteCredentialBinding.keyFor(
+            encryptedPrefs.getString(KEY_BOUND_API_KEY, null), endpoint,
+        )
+
+    fun hasApiKeyForEndpoint(endpoint: String): Boolean =
+        getApiKeyForEndpoint(endpoint).isNotBlank()
+
+    /** Save the key and its trusted origin as ONE encrypted preference value. */
+    fun setApiKeyForEndpoint(apiKey: String, endpoint: String): Boolean {
+        val serialized = RewriteCredentialBinding.bind(endpoint, apiKey) ?: return false
+        return encryptedPrefs.edit()
+            .putString(KEY_BOUND_API_KEY, serialized)
+            .remove(KEY_API_KEY)
+            .commit()
     }
 
-    fun hasApiKey(): Boolean {
-        return getApiKey().isNotBlank()
-    }
-
-    fun setApiKey(apiKey: String) {
-        val normalizedApiKey = apiKey.trim()
-        if (normalizedApiKey.isBlank()) {
-            encryptedPrefs.edit().remove(KEY_API_KEY).apply()
-        } else {
-            encryptedPrefs.edit().putString(KEY_API_KEY, normalizedApiKey).apply()
-        }
-    }
-
-    fun clearApiKey() {
-        encryptedPrefs.edit().remove(KEY_API_KEY).apply()
-    }
+    /** Do not report removal until the encrypted preference has been committed. */
+    fun clearApiKeyDurably(): Boolean =
+        encryptedPrefs.edit().remove(KEY_BOUND_API_KEY).remove(KEY_API_KEY).commit()
 }

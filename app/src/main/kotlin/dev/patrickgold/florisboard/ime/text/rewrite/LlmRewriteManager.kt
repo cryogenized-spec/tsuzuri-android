@@ -79,7 +79,8 @@ class LlmRewriteManager(
     private val secretsStore = LlmRewriteSecretsStore(appContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val rewriteClient = LlmRewriteClient(
-        apiKeyProvider = { secretsStore.getApiKey() },
+        apiKeyProvider = { "" },
+        apiKeyForEndpointProvider = { endpoint -> secretsStore.getApiKeyForEndpoint(endpoint) },
         endpointUrlProvider = { prefs.voxtral.postProcessingEndpointUrl.get() },
         modelProvider = { prefs.voxtral.postProcessingModel.get() },
         providerIdProvider = { prefs.voxtral.postProcessingProvider.get() },
@@ -136,7 +137,7 @@ class LlmRewriteManager(
         if (_uiStateFlow.value.step == RewriteStep.GENERATING) {
             return
         }
-        if (!secretsStore.hasApiKey()) {
+        if (!isRewriteConfigured()) {
             appContext.showShortToastSync(R.string.ime__rewrite__needs_key)
             return
         }
@@ -254,7 +255,14 @@ class LlmRewriteManager(
      */
     fun voiceRewriteOperation(): VoiceRewriteOperation = LlmVoiceRewriteOperation(rewriteClient)
 
-    fun isRewriteConfigured(): Boolean = secretsStore.hasApiKey()
+    fun isRewriteConfigured(): Boolean {
+        val endpoint = LlmRewriteProviders.resolve(
+            providerId = prefs.voxtral.postProcessingProvider.get(),
+            endpointUrl = prefs.voxtral.postProcessingEndpointUrl.get(),
+            model = prefs.voxtral.postProcessingModel.get(),
+        ).endpointUrl
+        return secretsStore.hasApiKeyForEndpoint(endpoint)
+    }
 
     /** Configured rewrite provider name without the API variant, never the endpoint URL. */
     fun rewriteProviderLabel(): String = LlmRewriteProviders.resolve(

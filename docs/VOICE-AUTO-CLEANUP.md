@@ -26,3 +26,9 @@ A future follow-up PR can handoff both raw and cleaned text to the temporary Pre
 ## Dependency reconciliation
 
 The current branch includes PR #6's shared transcription/provider credential snapshot guard and durable key deletion; do not regress them when adding cleanup. This stacked change remains a draft pending compile/review/device verification.
+
+## Provider-bound API keys (security)
+
+For privacy, the text-model API key is bound to the HTTPS origin (host and port) selected when the key is saved. Switching to another provider or a different custom-server origin does **not** reuse the earlier key. Automatic cleanup leaves the original transcript untouched when no key is bound to the selected provider. The same restriction protects manual AI rewrites.
+
+Existing pre-binding rewrite keys cannot be safely attributed to a provider and must be re-entered in Settings → AI → Rewrite API key once. On a new host, enter that host's own key before enabling Natural or Concise cleanup. Saves and removals use durable encrypted preference writes; a failure is shown rather than silently treated as success.

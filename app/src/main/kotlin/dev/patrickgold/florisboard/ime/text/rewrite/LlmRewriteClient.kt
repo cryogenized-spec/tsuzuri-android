@@ -38,6 +38,7 @@ class LlmRewriteClient(
     private val endpointUrlProvider: () -> String,
     private val modelProvider: () -> String,
     private val providerIdProvider: () -> String = { "" },
+    private val apiKeyForEndpointProvider: ((String) -> String)? = null,
     private val connectTimeoutMs: Int = 30_000,
     private val readTimeoutMs: Int = 60_000,
     private val maxRetryAttempts: Int = 2,
@@ -130,11 +131,6 @@ class LlmRewriteClient(
         voiceInstruction: String?,
         structuredSystemInstruction: String? = null,
     ): Result<PreparedRequest> {
-        val apiKey = apiKeyProvider().trim()
-        if (apiKey.isEmpty()) {
-            return Result.failure(IllegalStateException("No LLM API key configured."))
-        }
-
         val resolved = LlmRewriteProviders.resolve(providerIdProvider(), endpointUrlProvider(), modelProvider())
         val providerPreset = resolved.preset
         if (!resolved.isComplete) {
@@ -144,6 +140,14 @@ class LlmRewriteClient(
         val endpointUrl = resolved.endpointUrl
         if (!SecureEndpointPolicy.isAllowed(endpointUrl)) {
             return Result.failure(IllegalStateException("Remote rewrite endpoint must use HTTPS without embedded credentials."))
+        }
+
+        // Resolve the immutable destination BEFORE reading its credential.
+        // A provider change between independent settings reads must never send
+        // an old provider's API key to a newly selected host.
+        val apiKey = (apiKeyForEndpointProvider?.invoke(endpointUrl) ?: apiKeyProvider()).trim()
+        if (apiKey.isEmpty()) {
+            return Result.failure(IllegalStateException("No API key bound to this rewrite provider."))
         }
 
         val model = resolved.model

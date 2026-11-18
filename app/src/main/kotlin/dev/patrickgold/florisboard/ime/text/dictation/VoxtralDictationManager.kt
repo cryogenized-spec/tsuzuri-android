@@ -731,13 +731,18 @@ class VoxtralDictationManager(
             aiAvailabilityPolicy.current() !is AiAvailability.Available) return outcome
 
         val config = kotlinx.coroutines.withContext(Dispatchers.IO) {
-            val key = runCatching { cleanupSecretsStore.getApiKey().trim() }.getOrDefault("")
-            if (key.isBlank()) null else listOf(
-                key,
-                prefs.voxtral.postProcessingEndpointUrl.get(),
-                prefs.voxtral.postProcessingModel.get(),
-                prefs.voxtral.postProcessingProvider.get(),
+            val endpoint = prefs.voxtral.postProcessingEndpointUrl.get()
+            val model = prefs.voxtral.postProcessingModel.get()
+            val providerId = prefs.voxtral.postProcessingProvider.get()
+            val resolved = dev.patrickgold.florisboard.ime.text.rewrite.LlmRewriteProviders.resolve(
+                providerId, endpoint, model,
             )
+            // A prior provider's key is never sent to a new cleanup host.
+            // Keep the resolved provider tuple immutable for the whole request.
+            val key = runCatching {
+                cleanupSecretsStore.getApiKeyForEndpoint(resolved.endpointUrl)
+            }.getOrDefault("")
+            if (key.isBlank()) null else listOf(key, endpoint, model, providerId)
         }
         if (config == null) {
             appContext.showShortToastSync("AI voice cleanup needs a text-model API key; using original dictation.")
