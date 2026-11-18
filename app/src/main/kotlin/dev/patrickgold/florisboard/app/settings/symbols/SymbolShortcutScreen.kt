@@ -76,11 +76,14 @@ fun SymbolShortcutScreen() = FlorisScreen {
         val revision by SymbolShortcutStore.revision.collectAsState()
         val activeSubtype by subtypeManager.activeSubtypeFlow.collectAsState()
         val activeLayout = activeSubtype.layoutMap.characters.componentId
-        // Reuse the extension-aware layout used by the IME, once per subtype.
-        val layoutRows by produceState<List<List<String>>>(
-            initialValue = emptyList(), key1 = activeSubtype.layoutMap.characters,
+        val activeLayoutKey = activeSubtype.layoutMap.characters.toString()
+        // Extension indexing is asynchronous on cold start; refresh the picker
+        // when the IME publishes new layout resources, not just on subtype edits.
+        val resourcesVersion by keyboardManager.resources.anyChangedVersion.collectAsState()
+        val computedRows by produceState<Pair<String, List<List<String>>>?>(
+            initialValue = null, key1 = activeSubtype.layoutMap.characters, key2 = resourcesVersion,
         ) {
-            value = runCatching {
+            val layoutRows = runCatching {
                 val keyboard = keyboardManager.layoutManager
                     .computeKeyboardAsync(KeyboardMode.CHARACTERS, activeSubtype).await()
                 SymbolKeyboardRows.fromLabels(keyboard.arrangement.map { row ->
@@ -88,8 +91,12 @@ fun SymbolShortcutScreen() = FlorisScreen {
                         key.data.compute(DefaultComputingEvaluator)?.label
                     }
                 })
-            }.getOrDefault(emptyList())
+            }.getOrNull()
+            value = layoutRows?.let { activeLayoutKey to it }
         }
+        // A producer may be processing the previous subtype: never display its
+        // letter positions under the newly selected layout label.
+        val layoutRows = computedRows?.takeIf { it.first == activeLayoutKey }?.second
         var chosenPreset by rememberSaveable { mutableStateOf(SymbolPreset.WORK) }
         var pendingPreset by remember { mutableStateOf<SymbolPreset?>(null) }
         var selectedKey by rememberSaveable { mutableStateOf("E") }
@@ -153,13 +160,13 @@ fun SymbolShortcutScreen() = FlorisScreen {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 text = "Choose a letter to edit its long-press symbols.",
             )
-            if (layoutRows.isEmpty()) {
+            if (layoutRows != null && layoutRows.isEmpty()) {
                 Text(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     text = "No Latin letter keys available for this layout.",
                 )
             }
-            for (rowKeys in layoutRows) {
+            for (rowKeys in layoutRows.orEmpty()) {
                 Row(
                     modifier = Modifier.fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
