@@ -4,6 +4,8 @@
  */
 package dev.patrickgold.florisboard.app.settings.symbols
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -24,9 +27,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
@@ -36,8 +41,13 @@ import dev.patrickgold.florisboard.app.Routes
 import dev.patrickgold.florisboard.app.ui.ChoiceOption
 import dev.patrickgold.florisboard.app.ui.OwnkeyChoiceListRow
 import dev.patrickgold.florisboard.app.ui.OwnkeyGroup
+import dev.patrickgold.florisboard.app.ui.OwnkeyDialog
 import dev.patrickgold.florisboard.app.ui.OwnkeyRow
 import dev.patrickgold.florisboard.ime.text.rewrite.LlmRewriteClient
+import dev.patrickgold.florisboard.ime.keyboard.KeyboardMode
+import dev.patrickgold.florisboard.ime.keyboard.DefaultComputingEvaluator
+import dev.patrickgold.florisboard.keyboardManager
+import dev.patrickgold.florisboard.subtypeManager
 import dev.patrickgold.florisboard.ime.text.rewrite.LlmRewriteSecretsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -57,11 +67,31 @@ fun SymbolShortcutScreen() = FlorisScreen {
     val context = LocalContext.current
     val navController = LocalNavController.current
     val uriHandler = LocalUriHandler.current
+    val keyboardManager by context.keyboardManager()
+    val subtypeManager by context.subtypeManager()
 
     content {
         val shortcutScope = rememberCoroutineScope()
         LaunchedEffect(context) { SymbolShortcutStore.ensureLoaded(context) }
         val revision by SymbolShortcutStore.revision.collectAsState()
+        val activeSubtype by subtypeManager.activeSubtypeFlow.collectAsState()
+        val activeLayout = activeSubtype.layoutMap.characters.componentId
+        // Reuse the extension-aware layout used by the IME, once per subtype.
+        val layoutRows by produceState<List<List<String>>>(
+            initialValue = emptyList(), key1 = activeSubtype.layoutMap.characters,
+        ) {
+            value = runCatching {
+                val keyboard = keyboardManager.layoutManager
+                    .computeKeyboardAsync(KeyboardMode.CHARACTERS, activeSubtype).await()
+                SymbolKeyboardRows.fromLabels(keyboard.arrangement.map { row ->
+                    row.mapNotNull { key ->
+                        key.data.compute(DefaultComputingEvaluator)?.label
+                    }
+                })
+            }.getOrDefault(emptyList())
+        }
+        var chosenPreset by rememberSaveable { mutableStateOf(SymbolPreset.WORK) }
+        var pendingPreset by remember { mutableStateOf<SymbolPreset?>(null) }
         var selectedKey by rememberSaveable { mutableStateOf("E") }
         var selectedCategory by remember { mutableStateOf(SymbolCategory.ACCENTS) }
         var customInput by remember { mutableStateOf("") }
@@ -78,21 +108,66 @@ fun SymbolShortcutScreen() = FlorisScreen {
         var aiBusy by remember { mutableStateOf(false) }
         var aiMessage by remember { mutableStateOf("") }
 
-        OwnkeyGroup(title = "1. Choose a key") {
-            Text(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                text = "Assign up to six custom Unicode alternatives per letter. Keep the original Ownkey symbols and choose whether inherited accents appear or come first.",
+        OwnkeyGroup(title = "Symbol presets") {
+            OwnkeyChoiceListRow(
+                title = "Default set",
+                options = SymbolPreset.entries.map { preset ->
+                    ChoiceOption(preset, "${preset.title} — ${preset.description}")
+                },
+                selected = chosenPreset,
+                onSelect = { chosenPreset = it },
             )
-            for ((index, rowKeys) in "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chunked(6).withIndex()) {
+            Button(
+                onClick = { pendingPreset = chosenPreset },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testTag("unicode-apply-preset"),
+            ) { Text("Apply 3 symbols per letter") }
+        }
+
+        if (pendingPreset != null) {
+            val preset = pendingPreset!!
+            OwnkeyDialog(
+                title = "Apply ${preset.title} symbols?",
+                text = "Replace the custom symbols on all 26 letter keys with the three ${preset.title.lowercase()} defaults? Existing assignments will be overwritten.",
+                onDismiss = { pendingPreset = null },
+                confirmLabel = "Apply",
+                onConfirm = {
+                    pendingPreset = null
+                    val expected = ('A'..'Z').associate { letter ->
+                        letter.toString() to SymbolShortcutStore.forKey(letter.toString())
+                    }
+                    shortcutScope.launch {
+                        message = if (SymbolShortcutStore.replaceApproved(
+                                context, preset.assignments, expected = expected,
+                            )
+                        ) "${preset.title} symbols applied." else
+                            "Could not apply the preset because symbols changed or storage failed."
+                    }
+                },
+                dismissLabel = "Cancel",
+            )
+        }
+
+        OwnkeyGroup(title = "Key layout · ${activeLayout.uppercase()}") {
+            Text(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                text = "Choose a letter to edit its long-press symbols.",
+            )
+            if (layoutRows.isEmpty()) {
+                Text(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    text = "No Latin letter keys available for this layout.",
+                )
+            }
+            for (rowKeys in layoutRows) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    modifier = Modifier.fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    for (key in rowKeys) {
-                        val letter = key.toString()
-                        val modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp)
+                    for (letter in rowKeys) {
+                        val modifier = Modifier.width(44.dp).height(48.dp)
                             .testTag("unicode-key-$letter")
                         if (selectedKey == letter) {
                             Button(
@@ -108,15 +183,11 @@ fun SymbolShortcutScreen() = FlorisScreen {
                             ) { Text(letter) }
                         }
                     }
-                    // Keep the last row aligned to the same six-column grid.
-                    repeat(6 - rowKeys.length) {
-                        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-                    }
                 }
             }
         }
 
-        OwnkeyGroup(title = "2. Long-press menu options") {
+        OwnkeyGroup(title = "Long-press options") {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -147,6 +218,20 @@ fun SymbolShortcutScreen() = FlorisScreen {
                     }
                 },
             )
+            val editingEnabled by prefs.keyboard.editingShortcutsEnabled.collectPrefsAsState()
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("A · Select All | X · Cut | C · Copy | V · Paste", modifier = Modifier.weight(1f))
+                Switch(
+                    checked = editingEnabled,
+                    onCheckedChange = { enabled ->
+                        shortcutScope.launch { prefs.keyboard.editingShortcutsEnabled.set(enabled) }
+                    },
+                )
+            }
             Text(
                 "Existing symbols are retained. Hiding accents only hides inherited accents; " +
                     "an accented character you assign manually remains available.",
@@ -154,54 +239,49 @@ fun SymbolShortcutScreen() = FlorisScreen {
             )
         }
 
-        OwnkeyGroup(title = "3. Symbols for $selectedKey") {
+        OwnkeyGroup(title = "Symbols for $selectedKey") {
             val count = SymbolShortcutStore.MAX_SHORTCUTS_PER_KEY
             Text(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 text = "Custom alternatives: ${assigned.size}/$count. Tap an existing symbol to remove it.",
             )
-            if (assigned.isNotEmpty()) {
-                for (group in assigned.withIndex().toList().chunked(3)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        for ((slot, value) in group) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                OutlinedButton(
-                                    onClick = {
-                                        val key = selectedKey
-                                        shortcutScope.launch {
-                                            message = if (SymbolShortcutStore.remove(context, key, value)) {
-                                                "Removed $value from $key."
-                                            } else "This symbol is no longer assigned."
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth().testTag("unicode-remove-$value"),
-                                ) { Text("${slot + 1}: $value ×") }
-                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            val key = selectedKey
-                                            shortcutScope.launch { SymbolShortcutStore.move(context, key, value, -1) }
-                                        },
-                                        enabled = slot > 0,
-                                        modifier = Modifier.weight(1f),
-                                        contentPadding = PaddingValues(0.dp),
-                                    ) { Text("←") }
-                                    OutlinedButton(
-                                        onClick = {
-                                            val key = selectedKey
-                                            shortcutScope.launch { SymbolShortcutStore.move(context, key, value, 1) }
-                                        },
-                                        enabled = slot < assigned.lastIndex,
-                                        modifier = Modifier.weight(1f),
-                                        contentPadding = PaddingValues(0.dp),
-                                    ) { Text("→") }
-                                }
+            for ((slot, value) in assigned.withIndex()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("${slot + 1}. $value", modifier = Modifier.weight(1f))
+                    OutlinedButton(
+                        onClick = {
+                            val key = selectedKey
+                            shortcutScope.launch { SymbolShortcutStore.move(context, key, value, -1) }
+                        },
+                        enabled = slot > 0,
+                        modifier = Modifier.width(48.dp).height(44.dp),
+                        contentPadding = PaddingValues(0.dp),
+                    ) { Text("↑") }
+                    OutlinedButton(
+                        onClick = {
+                            val key = selectedKey
+                            shortcutScope.launch { SymbolShortcutStore.move(context, key, value, 1) }
+                        },
+                        enabled = slot < assigned.lastIndex,
+                        modifier = Modifier.width(48.dp).height(44.dp),
+                        contentPadding = PaddingValues(0.dp),
+                    ) { Text("↓") }
+                    TextButton(
+                        onClick = {
+                            val key = selectedKey
+                            shortcutScope.launch {
+                                message = if (SymbolShortcutStore.remove(context, key, value)) {
+                                    "Removed $value from $key."
+                                } else "This symbol is no longer assigned."
                             }
-                        }
-                    }
+                        },
+                        modifier = Modifier.testTag("unicode-remove-$value"),
+                    ) { Text("Remove") }
                 }
             }
             OwnkeyChoiceListRow(
@@ -270,7 +350,7 @@ fun SymbolShortcutScreen() = FlorisScreen {
             }
         }
 
-        OwnkeyGroup(title = "4. AI symbol assistant (optional)") {
+        OwnkeyGroup(title = "AI symbol assistant (optional)") {
             Text(
                 "The assistant can suggest symbols or propose multiple key assignments. " +
                     "No changes are made without your approval, and each AI request uses your own API key.",
@@ -451,7 +531,7 @@ fun SymbolShortcutScreen() = FlorisScreen {
             }
         }
 
-        OwnkeyGroup(title = "5. How it works") {
+        OwnkeyGroup(title = "How it works") {
             OwnkeyRow(
                 title = "Long-press delay",
                 value = "$longPressDelay ms",
