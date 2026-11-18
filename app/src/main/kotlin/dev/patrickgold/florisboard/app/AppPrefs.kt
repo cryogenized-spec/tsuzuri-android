@@ -854,6 +854,14 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
             key = "voxtral__language_hint",
             default = "",
         )
+        /**
+         * Standalone post-dictation text-model request. Default OFF; does not apply to
+         * live local speech composition or the separate hold-to-rewrite feature.
+         */
+        val dictationAutoCleanupMode = string(
+            key = "tsuzuri__dictation_auto_cleanup_mode",
+            default = "off",
+        )
         val postProcessingEnabled = boolean(
             key = "voxtral__post_processing_enabled",
             default = false,

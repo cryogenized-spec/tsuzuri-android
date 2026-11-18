@@ -69,6 +69,7 @@ import dev.patrickgold.florisboard.ime.text.dictation.CloudTranscriptionPresets
 import dev.patrickgold.florisboard.ime.text.dictation.CloudVoiceProviderGuard
 import dev.patrickgold.florisboard.ime.text.dictation.CloudVoiceProviderSwitcher
 import dev.patrickgold.florisboard.ime.text.dictation.TranscriptionBackend
+import dev.patrickgold.florisboard.ime.text.dictation.VoiceAutoCleanupMode
 import dev.patrickgold.florisboard.ime.text.dictation.TranscriptionLanguageHints
 import dev.patrickgold.florisboard.ime.text.dictation.TranscriptionLanguageMode
 import dev.patrickgold.florisboard.ime.text.dictation.VoxtralRelayTranscriptionClient
@@ -95,7 +96,7 @@ import org.florisboard.lib.compose.pluralsRes
 import org.florisboard.lib.compose.stringRes
 
 /** Dialogs and sheets of the AI screen; at most one is open. */
-private enum class AiPanel { CloudKey, CloudProvider, VoicePresets, Language, RewriteProvider, RewriteKey, RewriteModel, RewriteServer }
+private enum class AiPanel { CloudKey, CloudProvider, VoicePresets, VoiceCleanup, Language, RewriteProvider, RewriteKey, RewriteModel, RewriteServer }
 
 @Composable
 fun VoxtralScreen() = FlorisScreen {
@@ -156,6 +157,7 @@ fun VoxtralScreen() = FlorisScreen {
         val selectedBackend by prefsRef.voxtral.dictationBackend.collectAsState()
         val languageHint by prefsRef.voxtral.languageHint.collectAsState()
         val cloudVocabularyMode by prefsRef.voxtral.cloudVocabularyMode.collectAsState()
+        val voiceCleanupMode by prefsRef.voxtral.dictationAutoCleanupMode.collectAsState()
         val rewriteEndpointUrl by prefsRef.voxtral.postProcessingEndpointUrl.collectAsState()
         val rewriteModel by prefsRef.voxtral.postProcessingModel.collectAsState()
         val rewriteProviderId by prefsRef.voxtral.postProcessingProvider.collectAsState()
@@ -165,6 +167,7 @@ fun VoxtralScreen() = FlorisScreen {
         // The intended key host is fixed when the dialog opens, not read from
         // reactive endpoint state after an asynchronous preference write.
         var voiceKeyDialogEndpoint by rememberSaveable { mutableStateOf<String?>(null) }
+        var rewriteKeyDialogEndpoint by rememberSaveable { mutableStateOf<String?>(null) }
 
         // Key checks open the Keystore-backed stores and decrypt them, so they run off the main thread. The screen
         // waits for both: every route and status below depends on them. They are saveable so that coming back to
@@ -185,10 +188,25 @@ fun VoxtralScreen() = FlorisScreen {
                     }
                     readKey { voxtralSecretsStore.hasApiKey() }
                 }
-                cloudKeyPresent to readKey { llmRewriteSecretsStore.hasApiKey() }
+                val initialEndpoint = LlmRewriteProviders.resolve(
+                    prefsRef.voxtral.postProcessingProvider.get(),
+                    prefsRef.voxtral.postProcessingEndpointUrl.get(),
+                    prefsRef.voxtral.postProcessingModel.get(),
+                ).endpointUrl
+                cloudKeyPresent to readKey { llmRewriteSecretsStore.hasApiKeyForEndpoint(initialEndpoint) }
             }
             hasCloudKey = cloud
             hasRewriteKey = rewrite
+        }
+        // On every provider/host change, refresh whether the key belongs to
+        // the CURRENT destination rather than reporting an unrelated key.
+        LaunchedEffect(rewriteProviderId, rewriteEndpointUrl, rewriteModel) {
+            val destination = LlmRewriteProviders.resolve(
+                rewriteProviderId, rewriteEndpointUrl, rewriteModel,
+            ).endpointUrl
+            hasRewriteKey = withContext(Dispatchers.IO) {
+                readKey { llmRewriteSecretsStore.hasApiKeyForEndpoint(destination) }
+            }
         }
         val cloudKey = hasCloudKey
         val rewriteKey = hasRewriteKey
@@ -236,6 +254,27 @@ fun VoxtralScreen() = FlorisScreen {
                     )
                 },
             )
+
+            OwnkeyGroup(
+                title = "Automatic voice text cleanup",
+                footer = "Optional second API call to your configured AI rewrite provider. May incur charges. " +
+                    "Sends the raw transcript to that provider after recorded dictation ends; " +
+                    "never sends a message or creates a task automatically. Not available for live on-device transcription yet.",
+            ) {
+                OwnkeyRow(
+                    title = "After transcription",
+                    value = VoiceAutoCleanupMode.fromPreference(voiceCleanupMode).label,
+                    chevron = true,
+                    onClick = { panel = AiPanel.VoiceCleanup },
+                    modifier = Modifier.testTag("ai-voice-auto-cleanup"),
+                )
+                if (VoiceAutoCleanupMode.fromPreference(voiceCleanupMode) != VoiceAutoCleanupMode.OFF && !rewriteKey) {
+                    OwnkeyNotice(
+                        text = "AI cleanup requires a separately configured text-model API key below. " +
+                            "Until then, Tsuzuri keeps the original transcript.",
+                    )
+                }
+            }
 
             val cloudFooter = AiSettings.cloudFooter(
                 storedEndpointUrl = endpointUrl,
@@ -298,7 +337,10 @@ fun VoxtralScreen() = FlorisScreen {
                     title = stringRes(R.string.settings__ai__key__row),
                     value = keyValue(rewriteKey),
                     valueColor = warningIf(!rewriteKey),
-                    onClick = { panel = AiPanel.RewriteKey },
+                    onClick = {
+                        rewriteKeyDialogEndpoint = effectiveRewrite.endpointUrl
+                        panel = AiPanel.RewriteKey
+                    },
                     modifier = Modifier.testTag("ai-rewrite-key"),
                 )
                 val modelValue = AiSettings.rewriteModelValue(rewritePreset, rewriteModel)
@@ -404,6 +446,35 @@ fun VoxtralScreen() = FlorisScreen {
                             },
                             style = OwnkeyButtonStyle.Plain,
                             modifier = Modifier.testTag("ai-voice-signup"),
+                        )
+                    }
+                }
+                AiPanel.VoiceCleanup -> OwnkeySheet(
+                    onDismiss = closePanel,
+                    title = "Automatic voice cleanup",
+                ) { hide ->
+                    itemsIndexed(VoiceAutoCleanupMode.entries) { index, mode ->
+                        OwnkeyChoiceRow(
+                            label = mode.label,
+                            summary = when (mode) {
+                                VoiceAutoCleanupMode.OFF -> "Use transcription only. No extra AI text-model request."
+                                VoiceAutoCleanupMode.NATURAL -> "Remove filler and stumbles; preserve meaning, nuance and natural phrasing."
+                                VoiceAutoCleanupMode.CONCISE -> "Tighten meandering speech without deleting meaningful information."
+                            },
+                            selected = voiceCleanupMode == mode.preference,
+                            onClick = {
+                                scope.launch { prefsRef.voxtral.dictationAutoCleanupMode.set(mode.preference) }
+                                hide()
+                            },
+                            modifier = Modifier.testTag("ai-voice-cleanup-option-$index"),
+                        )
+                    }
+                    item {
+                        OwnkeyNotice(
+                            text = "Enabling either AI mode permits Tsuzuri to send completed transcription " +
+                                "text to your selected rewrite-model provider after recording ends. " +
+                                "The raw transcript is never automatically sent as a chat message. " +
+                                "AI-generated edits may be imperfect. Additional API fees may apply.",
                         )
                     }
                 }
@@ -523,11 +594,23 @@ fun VoxtralScreen() = FlorisScreen {
                     },
                     hasKey = rewriteKey,
                     onSave = { key ->
+                        // Freeze the intended destination at dialog open; do not
+                        // rebind an old provider's key after an async host change.
+                        val intendedEndpoint = rewriteKeyDialogEndpoint ?: effectiveRewrite.endpointUrl
                         scope.launch {
                             keyError = null
                             val change = withContext(Dispatchers.IO) {
-                                val stored = runCatching { llmRewriteSecretsStore.setApiKey(key) }.isSuccess
-                                AiSettings.apiKeySaved(stored, readKey { llmRewriteSecretsStore.hasApiKey() })
+                                val stored = runCatching {
+                                    llmRewriteSecretsStore.setApiKeyForEndpoint(key, intendedEndpoint)
+                                }.getOrDefault(false)
+                                val liveEndpoint = LlmRewriteProviders.resolve(
+                                    prefsRef.voxtral.postProcessingProvider.get(),
+                                    prefsRef.voxtral.postProcessingEndpointUrl.get(),
+                                    prefsRef.voxtral.postProcessingModel.get(),
+                                ).endpointUrl
+                                AiSettings.apiKeySaved(
+                                    stored, readKey { llmRewriteSecretsStore.hasApiKeyForEndpoint(liveEndpoint) },
+                                )
                             }
                             hasRewriteKey = change.hasKey
                             if (!change.succeeded) {
@@ -541,8 +624,18 @@ fun VoxtralScreen() = FlorisScreen {
                         scope.launch {
                             keyError = null
                             val change = withContext(Dispatchers.IO) {
-                                runCatching { llmRewriteSecretsStore.clearApiKey() }
-                                AiSettings.apiKeyRemoved(readKey { llmRewriteSecretsStore.hasApiKey() })
+                                val removed = runCatching {
+                                    llmRewriteSecretsStore.clearApiKeyDurably()
+                                }.getOrDefault(false)
+                                val liveEndpoint = LlmRewriteProviders.resolve(
+                                    prefsRef.voxtral.postProcessingProvider.get(),
+                                    prefsRef.voxtral.postProcessingEndpointUrl.get(),
+                                    prefsRef.voxtral.postProcessingModel.get(),
+                                ).endpointUrl
+                                val hasAfter = readKey {
+                                    llmRewriteSecretsStore.hasApiKeyForEndpoint(liveEndpoint)
+                                }
+                                ApiKeyChange(hasKey = hasAfter, succeeded = removed && !hasAfter)
                             }
                             hasRewriteKey = change.hasKey
                             if (!change.succeeded) {

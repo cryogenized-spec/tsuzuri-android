@@ -227,8 +227,13 @@ fun rememberAiStatus(): AiStatus {
     val hasCloudKey by produceState<Boolean?>(null) {
         value = withContext(Dispatchers.IO) { hasStoredKey { VoxtralSecretsStore(context).hasApiKey() } }
     }
-    val hasRewriteKey by produceState<Boolean?>(null) {
-        value = withContext(Dispatchers.IO) { hasStoredKey { LlmRewriteSecretsStore(context).hasApiKey() } }
+    val hasRewriteKey by produceState<Boolean?>(null, rewriteProviderId, rewriteEndpointUrl, rewriteModel) {
+        val endpoint = LlmRewriteProviders.resolve(
+            rewriteProviderId, rewriteEndpointUrl, rewriteModel,
+        ).endpointUrl
+        value = withContext(Dispatchers.IO) {
+            hasStoredKey { LlmRewriteSecretsStore(context).hasApiKeyForEndpoint(endpoint) }
+        }
     }
     // Only an Orukeet choice needs the model state, so other installs never start the model check from here.
     val orukeetSelected = dictationPreference == TranscriptionBackend.ORUKEET.preference

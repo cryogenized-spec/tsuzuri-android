@@ -308,7 +308,8 @@ fun SymbolShortcutScreen() = FlorisScreen {
                                 val result = withContext(Dispatchers.IO) {
                                     val secrets = LlmRewriteSecretsStore(context)
                                     val client = LlmRewriteClient(
-                                        apiKeyProvider = { secrets.getApiKey() },
+                                        apiKeyProvider = { "" },
+                                        apiKeyForEndpointProvider = { endpoint -> secrets.getApiKeyForEndpoint(endpoint) },
                                         endpointUrlProvider = {
                                             settingsPrefs.voxtral.postProcessingEndpointUrl.get()
                                         },

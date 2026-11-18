@@ -38,6 +38,7 @@ class LlmRewriteClient(
     private val endpointUrlProvider: () -> String,
     private val modelProvider: () -> String,
     private val providerIdProvider: () -> String = { "" },
+    private val apiKeyForEndpointProvider: ((String) -> String)? = null,
     private val connectTimeoutMs: Int = 30_000,
     private val readTimeoutMs: Int = 60_000,
     private val maxRetryAttempts: Int = 2,
@@ -130,11 +131,6 @@ class LlmRewriteClient(
         voiceInstruction: String?,
         structuredSystemInstruction: String? = null,
     ): Result<PreparedRequest> {
-        val apiKey = apiKeyProvider().trim()
-        if (apiKey.isEmpty()) {
-            return Result.failure(IllegalStateException("No LLM API key configured."))
-        }
-
         val resolved = LlmRewriteProviders.resolve(providerIdProvider(), endpointUrlProvider(), modelProvider())
         val providerPreset = resolved.preset
         if (!resolved.isComplete) {
@@ -144,6 +140,14 @@ class LlmRewriteClient(
         val endpointUrl = resolved.endpointUrl
         if (!SecureEndpointPolicy.isAllowed(endpointUrl)) {
             return Result.failure(IllegalStateException("Remote rewrite endpoint must use HTTPS without embedded credentials."))
+        }
+
+        // Resolve the immutable destination BEFORE reading its credential.
+        // A provider change between independent settings reads must never send
+        // an old provider's API key to a newly selected host.
+        val apiKey = (apiKeyForEndpointProvider?.invoke(endpointUrl) ?: apiKeyProvider()).trim()
+        if (apiKey.isEmpty()) {
+            return Result.failure(IllegalStateException("No API key bound to this rewrite provider."))
         }
 
         val model = resolved.model
@@ -218,6 +222,10 @@ class LlmRewriteClient(
                 )
             }
 
+            val parsed = Json.parseToJsonElement(responseBody).jsonObject
+            if (!RewriteResponseIntegrity.isComplete(parsed)) {
+                throw IllegalStateException("AI rewrite response was truncated; the original transcript was preserved.")
+            }
             val rewrittenText = extractRewrite(responseBody).trim()
             if (rewrittenText.isBlank()) {
                 throw IllegalStateException("LLM returned an empty rewrite.")
@@ -361,4 +369,16 @@ class LlmRewriteClient(
 private fun JsonObject.optString(key: String): String? {
     val value = this[key] as? JsonPrimitive ?: return null
     return value.contentOrNull
+}
+
+
+/** Do not silently replace dictated text with truncated content from any supported text-model API. */
+internal object RewriteResponseIntegrity {
+    fun isComplete(root: JsonObject): Boolean {
+        if (root.optString("stop_reason") == "max_tokens") return false
+        if (root.optString("status") == "incomplete") return false
+        val choice = (root["choices"] as? JsonArray)?.firstOrNull() as? JsonObject
+        if (choice?.optString("finish_reason") == "length") return false
+        return true
+    }
 }
