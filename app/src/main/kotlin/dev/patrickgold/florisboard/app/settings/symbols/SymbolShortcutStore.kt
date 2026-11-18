@@ -5,6 +5,10 @@
 package dev.patrickgold.florisboard.app.settings.symbols
 
 import android.content.Context
+import dev.patrickgold.florisboard.ime.keyboard.KeyData
+import dev.patrickgold.florisboard.ime.text.key.KeyType
+import dev.patrickgold.florisboard.ime.text.keyboard.TextKeyData
+import dev.patrickgold.florisboard.ime.text.keyboard.MultiTextKeyData
 import java.text.Normalizer
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -32,10 +36,14 @@ internal object SymbolShortcutStore {
     private const val PREF_SHOW_ACCENTS = "option__show_accents"
     private const val PREF_POPUP_PRIORITY = "option__popup_priority"
     private const val MAX_CODEPOINTS_PER_SHORTCUT = 8
+    private val accentMarks = Regex("[\\p{M}]")
 
     val revision = MutableStateFlow(0)
 
     @Volatile private var cached: Map<String, List<String>> = emptyMap()
+    // The IME reevaluates every key for shifts, selection and editor changes.
+    // Reuse immutable popup data rather than re-parsing codepoints on every frame.
+    @Volatile private var popupCache: Map<String, List<KeyData>> = emptyMap()
     @Volatile private var loaded = false
     @Volatile private var popupOptions = SymbolPopupOptions()
     private val storageMutex = Mutex()
@@ -60,7 +68,7 @@ internal object SymbolShortcutStore {
         val lower = candidate.lowercase(Locale.ROOT)
         if (lower == base || candidate.codePointCount(0, candidate.length) != 1) return false
         val stripped = Normalizer.normalize(lower, Normalizer.Form.NFD)
-            .replace(Regex("[\\p{M}]"), "")
+            .replace(accentMarks, "")
         if (stripped == base) return true
         return lower in when (base) {
             "a" -> setOf("æ", "ª")
@@ -131,6 +139,7 @@ internal object SymbolShortcutStore {
             if (symbols.isNotEmpty()) values[key] = symbols
         }
         cached = values.toMap()
+        popupCache = buildPopupCache(cached)
         loaded = true
         revision.value += 1
     }
@@ -142,6 +151,24 @@ internal object SymbolShortcutStore {
     fun forKey(label: String): List<String> {
         val key = keyOf(label) ?: return emptyList()
         return cached[key].orEmpty()
+    }
+
+    /** Pure precomputation; on-keyboard reads only the published immutable snapshot. */
+    internal fun buildPopupCache(assignments: Map<String, List<String>>): Map<String, List<KeyData>> =
+        assignments.mapValues { (_, symbols) ->
+            symbols.map { symbol ->
+                val points = symbol.codePoints().toArray()
+                if (points.size == 1) {
+                    TextKeyData(type = KeyType.CHARACTER, code = points[0], label = symbol)
+                } else {
+                    MultiTextKeyData(type = KeyType.CHARACTER, codePoints = points, label = symbol)
+                }
+            }
+        }
+
+    fun popupKeysFor(label: String): List<KeyData> {
+        val key = keyOf(label) ?: return emptyList()
+        return popupCache[key].orEmpty()
     }
 
     suspend fun add(context: Context, rawKey: String, rawSymbol: String): Boolean =
@@ -227,6 +254,7 @@ internal object SymbolShortcutStore {
                         if (symbols.isEmpty()) remove(key) else put(key, symbols.toList())
                     }
                 }.toMap()
+                popupCache = buildPopupCache(cached)
                 revision.value += 1
                 true
             }
@@ -252,6 +280,7 @@ internal object SymbolShortcutStore {
         cached = cached.toMutableMap().apply {
             if (symbols.isEmpty()) remove(key) else put(key, symbols.toList())
         }.toMap()
+        popupCache = buildPopupCache(cached)
         revision.value += 1
         return true
     }
