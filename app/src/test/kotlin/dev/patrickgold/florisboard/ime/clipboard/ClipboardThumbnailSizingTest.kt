@@ -4,34 +4,29 @@
  */
 package dev.patrickgold.florisboard.ime.clipboard
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.shouldBe
 
-class ClipboardThumbnailSizingTest {
-    @Test
-    fun smallImagesDoNotNeedSampling() {
-        assertEquals(1, ClipboardThumbnailSizing.sampleSize(200, 100))
-        assertEquals(1, ClipboardThumbnailSizing.sampleSize(384, 384))
+class ClipboardThumbnailSizingTest : FunSpec({
+    test("small images do not need sampling") {
+        ClipboardThumbnailSizing.sampleSize(200, 100) shouldBe 1
+        ClipboardThumbnailSizing.sampleSize(384, 384) shouldBe 1
     }
 
-    @Test
-    fun wideAndTallPhotosAreBoundedEqually() {
-        assertEquals(16, ClipboardThumbnailSizing.sampleSize(4032, 3024))
-        assertEquals(16, ClipboardThumbnailSizing.sampleSize(3024, 4032))
-        assertEquals(2, ClipboardThumbnailSizing.sampleSize(385, 200))
+    test("wide and tall photos are bounded equally") {
+        ClipboardThumbnailSizing.sampleSize(4032, 3024) shouldBe 16
+        ClipboardThumbnailSizing.sampleSize(3024, 4032) shouldBe 16
+        ClipboardThumbnailSizing.sampleSize(385, 200) shouldBe 2
     }
 
-    @Test
-    fun invalidImageBoundsDoNotCauseDivisionErrors() {
-        assertEquals(1, ClipboardThumbnailSizing.sampleSize(-1, -1))
-        assertEquals(1, ClipboardThumbnailSizing.sampleSize(0, 4000))
+    test("invalid image bounds do not cause division errors") {
+        ClipboardThumbnailSizing.sampleSize(-1, -1) shouldBe 1
+        ClipboardThumbnailSizing.sampleSize(0, 4000) shouldBe 1
     }
 
-    @Test
-    fun extremeDimensionsCannotOverflowSampleSize() {
+    test("extreme dimensions do not overflow sample size") {
         val sample = ClipboardThumbnailSizing.sampleSize(Int.MAX_VALUE, Int.MAX_VALUE)
-        assertTrue(sample > 0)
-        assertTrue(Int.MAX_VALUE / sample <= ClipboardThumbnailSizing.MAX_DIMENSION_PX)
+        (sample > 0) shouldBe true
+        (Int.MAX_VALUE / sample <= ClipboardThumbnailSizing.MAX_DIMENSION_PX) shouldBe true
     }
-}
+})
