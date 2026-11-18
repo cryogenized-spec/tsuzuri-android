@@ -7,7 +7,6 @@ package dev.patrickgold.florisboard.ime.clipboard
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -38,7 +37,6 @@ class ClipboardPreviewFrameTest {
         // A cancelled producer should never commit its now-superseded result.
         oldJob.cancelAndJoin()
         delayedOldDecode.complete(ClipboardPreviewFrame(firstUri, "picture A"))
-        runCurrent()
         assertNull(visible)
 
         // The URI check also protects against a result that races with the
