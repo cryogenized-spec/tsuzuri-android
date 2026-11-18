@@ -95,7 +95,11 @@ import org.florisboard.lib.compose.pluralsRes
 import org.florisboard.lib.compose.stringRes
 
 /** Dialogs and sheets of the AI screen; at most one is open. */
-private enum class AiPanel { CloudKey, CloudProvider, VoicePresets, Language, RewriteProvider, RewriteKey, RewriteModel, RewriteServer }
+internal enum class AiPanel { CloudKey, CloudProvider, VoicePresets, Language, RewriteProvider, RewriteKey, RewriteModel, RewriteCustomModel, RewriteServer }
+
+/** An outgoing bottom-sheet dismissal may arrive after the user switched to a dialog. */
+internal fun onRewriteModelSheetDismiss(current: AiPanel?): AiPanel? =
+    current.takeUnless { it == AiPanel.RewriteModel }
 
 @Composable
 fun VoxtralScreen() = FlorisScreen {
@@ -266,18 +270,19 @@ fun VoxtralScreen() = FlorisScreen {
                     modifier = Modifier.testTag("ai-cloud-language"),
                 )
                 OwnkeyRow(
-                    title = stringRes(R.string.settings__ai__provider__row),
-                    value = cloudProvider ?: stringRes(R.string.settings__ai__status__custom_server),
+                    title = "Speech vendor / model",
+                    value = CloudTranscriptionPresets.matching(endpointUrl, cloudModel)?.name
+                        ?: "${cloudProvider ?: "Custom server"} · ${cloudModel.ifBlank { VoxtralRelayTranscriptionClient.DefaultModel }}",
                     valueColor = warningIf(!isUsableCloudEndpoint(endpointUrl)),
-                    onClick = { panel = AiPanel.CloudProvider },
-                    modifier = Modifier.testTag("ai-cloud-provider"),
-                )
-                OwnkeyRow(
-                    title = "Recommended speech providers",
-                    value = "Choose a model and open its setup website",
                     chevron = true,
                     onClick = { panel = AiPanel.VoicePresets },
                     modifier = Modifier.testTag("ai-voice-provider-presets"),
+                )
+                OwnkeyRow(
+                    title = "Custom speech endpoint / model",
+                    value = "Advanced",
+                    onClick = { panel = AiPanel.CloudProvider },
+                    modifier = Modifier.testTag("ai-cloud-provider"),
                 )
             }
 
@@ -305,7 +310,7 @@ fun VoxtralScreen() = FlorisScreen {
                 OwnkeyRow(
                     title = stringRes(R.string.settings__ai__rewrite_model__row),
                     value = when (modelValue) {
-                        RewriteModelValue.Default -> stringRes(R.string.settings__ai__rewrite_model__default)
+                        RewriteModelValue.Default -> rewritePreset.defaultModel
                         RewriteModelValue.NotSet -> stringRes(R.string.settings__ai__not_set)
                         is RewriteModelValue.Named -> modelValue.model
                     },
@@ -555,7 +560,35 @@ fun VoxtralScreen() = FlorisScreen {
                     onDismiss = closePanel,
                     errorText = keyError,
                 )
-                AiPanel.RewriteModel -> TextFieldDialog(
+                AiPanel.RewriteModel -> OwnkeySheet(
+                    onDismiss = { panel = onRewriteModelSheetDismiss(panel) },
+                    title = stringRes(R.string.settings__ai__rewrite_model__title),
+                ) { hide ->
+                    val choices = RewriteModelChoices.forProvider(rewritePreset)
+                    itemsIndexed(choices) { index, modelId ->
+                        OwnkeyChoiceRow(
+                            label = if (index == 0 && modelId == rewritePreset.defaultModel) {
+                                "Provider default · $modelId"
+                            } else modelId,
+                            selected = effectiveRewrite.model == modelId,
+                            onClick = {
+                                scope.launch { prefsRef.voxtral.postProcessingModel.set(modelId) }
+                                hide()
+                            },
+                            modifier = Modifier.testTag("ai-rewrite-model-option-$index"),
+                        )
+                    }
+                    item {
+                        OwnkeyChoiceRow(
+                            label = "Enter another model ID",
+                            summary = "Older or provider-specific model",
+                            selected = false,
+                            onClick = { panel = AiPanel.RewriteCustomModel },
+                            modifier = Modifier.testTag("ai-rewrite-custom-model"),
+                        )
+                    }
+                }
+                AiPanel.RewriteCustomModel -> TextFieldDialog(
                     title = stringRes(R.string.settings__ai__rewrite_model__title),
                     label = stringRes(R.string.settings__ai__rewrite_model__row),
                     initialValue = AiSettings.rewriteModelDraft(rewritePreset, rewriteModel),

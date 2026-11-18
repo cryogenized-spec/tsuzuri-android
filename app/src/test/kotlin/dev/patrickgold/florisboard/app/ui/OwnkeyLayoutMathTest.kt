@@ -94,6 +94,13 @@ class OwnkeyLayoutMathTest : FunSpec({
             stacksRowValue(1.5f) shouldBe true
             stacksRowValue(2.0f) shouldBe true
         }
+        test("phone widths show entire model names below the setting title") {
+            stacksRowValueForViewport(1.0f, 360) shouldBe true
+            stacksRowValueForViewport(1.0f, 420) shouldBe true
+            stacksRowValueForViewport(1.0f, 421) shouldBe false
+            stacksRowValueForViewport(1.5f, 700) shouldBe true
+            stacksRowValueForViewport(1.0f, 700) shouldBe false
+        }
     }
 
     context("slider steps") {
