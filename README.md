@@ -23,6 +23,12 @@ Debug variants use a distinct application ID: `io.github.cryogenizedspec.tsuzuri
 
 The CI workflow builds a debug APK and runs unit tests on every pull request. **An APK should be considered experimental until successfully installed and tested on a physical device.**
 
+## Keyboard + clipboard alpha
+
+A focused keyboard-first alpha branch puts the clipboard button in the always-accessible smartbar position, exposes Copy/Paste/Select All/Undo, and returns to typing after a successful clipboard paste by default. Clipboard history remains on-device, with pin, delete, and a setting to keep the clipboard panel open for successive pastes.
+
+To try a **debug APK** on a real Android device, follow [the alpha install and smoke-test guide](docs/ALPHA-KEYBOARD-CLIPBOARD.md). Use the APK from a **green CI run for the alpha branch**; do not confuse the Android instrumentation test APK with the keyboard installer. Keep your existing keyboard installed until physical testing is complete.
+
 ## Direction
 
 - **M0 — bootstrap:** independent app ID/name, safe CI, reproducible build, baseline keyboard typing tests
