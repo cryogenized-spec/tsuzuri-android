@@ -141,6 +141,7 @@ fun VoxtralScreen() = FlorisScreen {
         val voiceSwitcher = remember {
             CloudVoiceProviderSwitcher(
                 currentEndpoint = { prefsRef.voxtral.endpointUrl.get() },
+                currentModel = { prefsRef.voxtral.model.get() },
                 durablyEraseKey = {
                     withContext(Dispatchers.IO) {
                         runCatching { voxtralSecretsStore.clearApiKeyDurably() }.getOrDefault(false)
@@ -478,6 +479,10 @@ fun VoxtralScreen() = FlorisScreen {
                                         CloudVoiceProviderSwitcher.SwitchResult.KeyDeletionFailed -> {
                                             context.voiceProviderKeyClearFailed()
                                         }
+                                        is CloudVoiceProviderSwitcher.SwitchResult.SettingsUpdateFailed -> {
+                                            if (result.keyCleared) hasCloudKey = false
+                                            context.voiceProviderSettingsWriteFailed(result.restoredPreviousSettings)
+                                        }
                                     }
                                 }
                             },
@@ -521,6 +526,10 @@ fun VoxtralScreen() = FlorisScreen {
                                 }
                                 CloudVoiceProviderSwitcher.SwitchResult.KeyDeletionFailed ->
                                     context.voiceProviderKeyClearFailed()
+                                is CloudVoiceProviderSwitcher.SwitchResult.SettingsUpdateFailed -> {
+                                    if (result.keyCleared) hasCloudKey = false
+                                    context.voiceProviderSettingsWriteFailed(result.restoredPreviousSettings)
+                                }
                             }
                         }
                     },
@@ -869,4 +878,14 @@ private fun Context.voiceProviderKeyClearFailed() {
         this, "Unable to remove the previous provider key; provider was not changed.",
         android.widget.Toast.LENGTH_LONG,
     ).show()
+}
+
+/** A settings-write failure must not quietly dismiss the provider dialog. */
+private fun Context.voiceProviderSettingsWriteFailed(restored: Boolean) {
+    val message = if (restored) {
+        "Unable to save the voice provider. Previous settings were restored; check your API key."
+    } else {
+        "Voice provider settings could not be confirmed. Check the provider and API key before dictation."
+    }
+    android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
 }
