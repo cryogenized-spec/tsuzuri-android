@@ -35,6 +35,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.patrickgold.florisboard.app.LocalNavController
 import dev.patrickgold.florisboard.app.Routes
@@ -287,7 +289,9 @@ fun SymbolShortcutScreen() = FlorisScreen {
                                 } else "This symbol is no longer assigned."
                             }
                         },
-                        modifier = Modifier.testTag("unicode-remove-$value"),
+                        modifier = Modifier
+                            .testTag("unicode-remove-$value")
+                            .semantics { contentDescription = "Remove $value from $selectedKey, slot ${slot + 1}" },
                     ) { Text("Remove") }
                 }
             }
