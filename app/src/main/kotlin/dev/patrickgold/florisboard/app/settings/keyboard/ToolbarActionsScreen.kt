@@ -104,7 +104,7 @@ fun ToolbarActionsScreen() = FlorisScreen {
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     TextButton(
-                        onClick = { update { it.unpinToolbarAction() } },
+                        onClick = { update { it.unpinToolbarAction(pinned) } },
                         modifier = Modifier.testTag("toolbar-unpin"),
                     ) { Text("Unpin") }
                 }
@@ -135,27 +135,27 @@ fun ToolbarActionsScreen() = FlorisScreen {
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     IconButton(
-                        onClick = { update { it.moveToolbarAction(index, index - 1) } },
+                        onClick = { update { it.moveToolbarAction(action, -1) } },
                         enabled = index > 0,
                         modifier = Modifier.testTag("toolbar-move-up-$index"),
                     ) {
                         Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move $label earlier")
                     }
                     IconButton(
-                        onClick = { update { it.moveToolbarAction(index, index + 1) } },
+                        onClick = { update { it.moveToolbarAction(action, 1) } },
                         enabled = index < arrangement.dynamicActions.lastIndex,
                         modifier = Modifier.testTag("toolbar-move-down-$index"),
                     ) {
                         Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move $label later")
                     }
                     IconButton(
-                        onClick = { update { it.pinToolbarAction(index) } },
+                        onClick = { update { it.pinToolbarAction(action) } },
                         modifier = Modifier.testTag("toolbar-pin-$index"),
                     ) {
                         Icon(Icons.Filled.Star, contentDescription = "Pin $label")
                     }
                     IconButton(
-                        onClick = { update { it.hideToolbarAction(index) } },
+                        onClick = { update { it.hideToolbarAction(action) } },
                         modifier = Modifier.testTag("toolbar-hide-$index"),
                     ) {
                         Icon(Icons.Filled.Close, contentDescription = "Hide $label")
@@ -179,7 +179,7 @@ fun ToolbarActionsScreen() = FlorisScreen {
                 ) {
                     Text(label, modifier = Modifier.weight(1f))
                     TextButton(
-                        onClick = { update { it.showToolbarAction(index) } },
+                        onClick = { update { it.showToolbarAction(action) } },
                         modifier = Modifier.testTag("toolbar-show-$index"),
                     ) { Text("Show") }
                 }
