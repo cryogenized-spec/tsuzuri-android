@@ -163,11 +163,9 @@ class VoxtralDictationManager(
         AutoVoiceCaptureCoordinator(
             scope = scope,
             current = {
-                val backend = when (prefs.voxtral.dictationBackend.get()) {
-                    TranscriptionBackend.ORUKEET.preference -> TranscriptionBackend.ORUKEET
-                    TranscriptionBackend.CLOUD.preference -> TranscriptionBackend.CLOUD
-                    else -> TranscriptionBackend.UNAVAILABLE
-                }
+                val backend = AutoVoiceCapturePolicy.backendForAuto(
+                    prefs.voxtral.dictationBackend.get(),
+                )
                 AutoVoiceCaptureContext(
                     enabled = prefs.voxtral.autoVoiceCapture.get(),
                     backend = backend,
