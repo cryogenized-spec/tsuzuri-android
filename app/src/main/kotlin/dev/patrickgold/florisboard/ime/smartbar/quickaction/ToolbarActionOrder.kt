@@ -50,3 +50,26 @@ internal fun QuickActionArrangement.unpinToolbarAction(): QuickActionArrangement
     val pinned = stickyAction ?: return this
     return copy(stickyAction = null, dynamicActions = listOf(pinned) + dynamicActions).distinct()
 }
+
+/**
+ * Resolve a toolbar edit against the CURRENT saved arrangement rather than the
+ * index captured in an earlier Compose frame. This also makes repeated rapid taps
+ * on the same arrow cumulative instead of swapping two different actions.
+ */
+internal fun QuickActionArrangement.moveToolbarAction(action: QuickAction, delta: Int): QuickActionArrangement {
+    val currentIndex = dynamicActions.indexOf(action)
+    if (currentIndex < 0 || delta == 0) return this
+    return moveToolbarAction(currentIndex, currentIndex + delta)
+}
+
+internal fun QuickActionArrangement.hideToolbarAction(action: QuickAction): QuickActionArrangement =
+    hideToolbarAction(dynamicActions.indexOf(action))
+
+internal fun QuickActionArrangement.showToolbarAction(action: QuickAction): QuickActionArrangement =
+    showToolbarAction(hiddenActions.indexOf(action))
+
+internal fun QuickActionArrangement.pinToolbarAction(action: QuickAction): QuickActionArrangement =
+    pinToolbarAction(dynamicActions.indexOf(action))
+
+internal fun QuickActionArrangement.unpinToolbarAction(expectedPinnedAction: QuickAction): QuickActionArrangement =
+    if (stickyAction == expectedPinnedAction) unpinToolbarAction() else this
