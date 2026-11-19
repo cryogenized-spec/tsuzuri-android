@@ -174,7 +174,7 @@ class VoxtralDictationManager(
                     editorSessionId = editorInstance.activeInputSessionId,
                     eligibleEditor = aiAvailabilityPolicy.current() is AiAvailability.Available,
                     micPermission = hasRecordAudioPermission(),
-                    backendReady = backend != TranscriptionBackend.ORUKEET || appContext.offlineDictation().ready,
+                    backendReady = backend != TranscriptionBackend.ORUKEET || appContext.offlineDictation().compatible,
                     alreadyActive = _stateFlow.value != DictationState.IDLE ||
                         operationJob?.isActive == true || activeLease != null,
                 )
@@ -183,7 +183,7 @@ class VoxtralDictationManager(
                 when (backend) {
                     TranscriptionBackend.CLOUD ->
                         kotlinx.coroutines.withContext(Dispatchers.IO) { apiKey().isNotBlank() }
-                    TranscriptionBackend.ORUKEET -> appContext.offlineDictation().ready
+                    TranscriptionBackend.ORUKEET -> appContext.offlineDictation().awaitInitialReadiness()
                     else -> false
                 }
             },
