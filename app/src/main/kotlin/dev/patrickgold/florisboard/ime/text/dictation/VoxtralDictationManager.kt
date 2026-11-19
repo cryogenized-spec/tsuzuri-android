@@ -147,6 +147,8 @@ class VoxtralDictationManager(
     private var live: LiveDictation? = null
     private var sessionGeneration = 0L
     private var autoStopJob: Job? = null
+    /** An explicit Stop/Cancel must not be undone by another input-view callback. */
+    private var autoCaptureSuppressedUntilKeyboardHide = false
     private var activeLease: AudioSessionLease? = null
     private var operationJob: Job? = null
 
@@ -170,6 +172,62 @@ class VoxtralDictationManager(
 
     val feedbackStateFlow: StateFlow<VoiceActionFeedbackState> = feedbackController.state
 
+    /**
+     * Runs only after the user enabled Auto in settings. Never call on keyboard creation
+     * without the active editor and visible-window gates in FlorisImeService.
+     */
+    fun maybeAutoStartOnKeyboardFocus(eligibleEditor: Boolean) {
+        if (!prefs.voxtral.autoVoiceCapture.get()) return
+
+        // Do not automatically launch Android's third-party voice IME. Auto capture is only
+        // available for a backend the user deliberately selected and configured in Tsuzuri.
+        val backend = when (prefs.voxtral.dictationBackend.get()) {
+            TranscriptionBackend.ORUKEET.preference -> TranscriptionBackend.ORUKEET
+            TranscriptionBackend.CLOUD.preference -> TranscriptionBackend.CLOUD
+            else -> return
+        }
+        val requestedGeneration = sessionGeneration
+        val requestedEditorSessionId = editorInstance.activeInputSessionId
+        if (!AutoVoiceCapturePolicy.shouldStart(
+                explicitlyEnabled = true,
+                backend = backend,
+                eligibleEditor = eligibleEditor && aiAvailabilityPolicy.current() is AiAvailability.Available,
+                hasMicPermission = hasRecordAudioPermission(),
+                configured = backend != TranscriptionBackend.ORUKEET || appContext.offlineDictation().ready,
+                alreadyActive = _stateFlow.value != DictationState.IDLE || operationJob?.isActive == true,
+                stoppedByUser = autoCaptureSuppressedUntilKeyboardHide,
+            )
+        ) return
+
+        // Cloud credential checks access Android Keystore, and must never block keyboard opening.
+        scope.launch {
+            val configured = when (backend) {
+                TranscriptionBackend.CLOUD -> kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    apiKey().isNotBlank()
+                }
+                TranscriptionBackend.ORUKEET -> appContext.offlineDictation().ready
+                else -> false
+            }
+            // A focus change, keyboard hide, explicit Stop or settings change makes this old
+            // preflight inert. In particular, no delayed IO result can start a hidden microphone.
+            if (requestedGeneration != sessionGeneration ||
+                requestedEditorSessionId != editorInstance.activeInputSessionId
+            ) return@launch
+            if (AutoVoiceCapturePolicy.shouldStart(
+                    explicitlyEnabled = prefs.voxtral.autoVoiceCapture.get(),
+                    backend = backend,
+                    eligibleEditor = eligibleEditor && aiAvailabilityPolicy.current() is AiAvailability.Available,
+                    hasMicPermission = hasRecordAudioPermission(),
+                    configured = configured,
+                    alreadyActive = _stateFlow.value != DictationState.IDLE || operationJob?.isActive == true,
+                    stoppedByUser = autoCaptureSuppressedUntilKeyboardHide,
+                )
+            ) {
+                startListening(backend)
+            }
+        }
+    }
+
     fun onVoiceInputKeyPressed() {
         if (aiAvailabilityPolicy.current() !is AiAvailability.Available) {
             activeLease?.let { cancelDictation() }
@@ -191,8 +249,14 @@ class VoxtralDictationManager(
                     DictationState.IDLE,
                     DictationState.ERROR -> startListening(currentMode)
 
-                    DictationState.LISTENING -> stopAndInsertTranscript()
-                    DictationState.PAUSED -> stopAndInsertTranscript()
+                    DictationState.LISTENING -> {
+                        autoCaptureSuppressedUntilKeyboardHide = true
+                        stopAndInsertTranscript()
+                    }
+                    DictationState.PAUSED -> {
+                        autoCaptureSuppressedUntilKeyboardHide = true
+                        stopAndInsertTranscript()
+                    }
                     DictationState.TRANSCRIBING -> {
                         appContext.showShortToastSync(dev.patrickgold.florisboard.R.string.ime__dictation__already_transcribing)
                     }
@@ -287,6 +351,7 @@ class VoxtralDictationManager(
     }
 
     fun cancelDictation() {
+        autoCaptureSuppressedUntilKeyboardHide = true
         endLive(keepText = false)
         val lease = activeLease ?: run {
             sessionGeneration++
@@ -436,6 +501,11 @@ class VoxtralDictationManager(
     }
 
     fun invalidateSession(reason: AudioSessionInvalidation) {
+        if (reason == AudioSessionInvalidation.KEYBOARD_HIDE ||
+            reason == AudioSessionInvalidation.IME_TEARDOWN
+        ) {
+            autoCaptureSuppressedUntilKeyboardHide = false
+        }
         endLive(keepText = true)
         sessionGeneration++
         autoStopJob?.cancel(); autoStopJob = null
