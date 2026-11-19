@@ -65,6 +65,7 @@ import dev.patrickgold.florisboard.app.ui.OwnkeyRow
 import dev.patrickgold.florisboard.app.ui.OwnkeySheet
 import dev.patrickgold.florisboard.app.ui.OwnkeyTextField
 import dev.patrickgold.florisboard.app.ui.OwnkeyTone
+import dev.patrickgold.florisboard.app.ui.SwitchPreference
 import dev.patrickgold.florisboard.ime.text.dictation.CloudTranscriptionPresets
 import dev.patrickgold.florisboard.ime.text.dictation.CloudVoiceProviderGuard
 import dev.patrickgold.florisboard.ime.text.dictation.CloudVoiceProviderSwitcher
@@ -240,6 +241,19 @@ fun VoxtralScreen() = FlorisScreen {
                     )
                 },
             )
+
+            OwnkeyGroup(title = "Voice capture mode") {
+                SwitchPreference(
+                    pref = prefsRef.voxtral.autoVoiceCapture,
+                    title = "Auto voice capture",
+                    summaryOn = "Auto ON: start listening in eligible text fields when the keyboard opens. " +
+                        "Stop ends capture until the keyboard is dismissed and opened again. " +
+                        "Never records in secure or incognito fields.",
+                    summaryOff = "Manual (default): tap the microphone to start, tap Stop to transcribe. " +
+                        "Recording never starts just because the keyboard opens.",
+                    modifier = Modifier.testTag("ai-auto-voice-capture"),
+                )
+            }
 
             val cloudFooter = AiSettings.cloudFooter(
                 storedEndpointUrl = endpointUrl,
