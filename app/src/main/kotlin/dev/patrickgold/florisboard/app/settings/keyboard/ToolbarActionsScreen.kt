@@ -22,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +42,8 @@ import dev.patrickgold.florisboard.keyboardManager
 import dev.patrickgold.florisboard.lib.compose.FlorisScreen
 import dev.patrickgold.jetpref.datastore.model.collectAsState
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Accessible, discoverable alternative to the keyboard's existing long-press drag editor.
@@ -53,6 +56,7 @@ fun ToolbarActionsScreen() = FlorisScreen {
 
     content {
         val scope = rememberCoroutineScope()
+        val saveMutex = remember { Mutex() }
         val context = LocalContext.current
         val keyboardManager by context.keyboardManager()
         val evaluator by keyboardManager.activeSmartbarEvaluator.collectAsState()
@@ -62,10 +66,12 @@ fun ToolbarActionsScreen() = FlorisScreen {
         // a previous movement using an obsolete composable snapshot.
         fun update(transform: (QuickActionArrangement) -> QuickActionArrangement) {
             scope.launch {
-                val current = prefs.smartbar.actionArrangement.get()
-                val updated = transform(current)
-                if (updated != current) {
-                    prefs.smartbar.actionArrangement.set(updated)
+                saveMutex.withLock {
+                    val current = prefs.smartbar.actionArrangement.get()
+                    val updated = transform(current)
+                    if (updated != current) {
+                        prefs.smartbar.actionArrangement.set(updated)
+                    }
                 }
             }
         }
