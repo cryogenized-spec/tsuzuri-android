@@ -52,6 +52,16 @@ class OfflineDictationController(private val app: FlorisApplication) {
     val selected: Boolean get() = prefs.voxtral.dictationBackend.get() == TranscriptionBackend.ORUKEET.preference
     val ready: Boolean get() = compatible && store.currentId != null && state.value.phase !in setOf(ModelPhase.ACTIVATING, ModelPhase.REMOVING)
 
+    /**
+     * Auto voice capture must wait for the installed model's asynchronous startup
+     * reconciliation instead of treating transient CHECKING as "not configured".
+     * Awaiting is cancellable; hiding the keyboard cancels the requesting coroutine.
+     */
+    suspend fun awaitInitialReadiness(): Boolean {
+        initialized.await()
+        return ready
+    }
+
     private fun publish(phase: ModelPhase = ModelPhase.IDLE, error: LocalAsrFailure? = null, errorDetail: String? = null) {
         _state.update {
             it.copy(

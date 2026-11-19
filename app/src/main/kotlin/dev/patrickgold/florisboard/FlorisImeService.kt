@@ -282,6 +282,22 @@ class FlorisImeService : LifecycleInputMethodService() {
         voxtralDictationManager()
     private val voxtralDictationManager by voxtralDictationManagerLazy
     private val voiceRewriteUiControllerLazy = voiceRewriteUiController()
+    private var autoVoiceWindowVisible = false
+
+    /**
+     * Auto capture is opt-in, limited to a visible keyboard and an eligible editor.
+     * Ordinary microphone permission alone must never activate dictation.
+     */
+    private fun maybeAutoStartVisibleVoiceCapture() {
+        if (!autoVoiceWindowVisible || !prefs.voxtral.autoVoiceCapture.get()) return
+        val info = editorInstance.activeInfo
+        val eligible = voiceOnlyAllowed(
+            info.inputAttributes.type,
+            info.isAiSecureField(),
+            activeState.isIncognitoMode,
+        )
+        voxtralDictationManager.maybeAutoStartOnKeyboardFocus(eligible)
+    }
 
     val windowController = ImeWindowController(prefs, lifecycleScope)
 
@@ -441,6 +457,7 @@ class FlorisImeService : LifecycleInputMethodService() {
         windowController.updateVoiceOnlyAllowed(
             voiceOnlyAllowed(editorInfo.inputAttributes.type, editorInfo.isAiSecureField(), activeState.isIncognitoMode),
         )
+        maybeAutoStartVisibleVoiceCapture()
     }
 
     override fun onEvaluateInputViewShown(): Boolean {
@@ -487,6 +504,8 @@ class FlorisImeService : LifecycleInputMethodService() {
 
     override fun onWindowShown() {
         super.onWindowShown()
+        autoVoiceWindowVisible = true
+        maybeAutoStartVisibleVoiceCapture()
         if (windowController.onWindowShown()) {
             flogInfo(LogTopic.IMS_EVENTS)
             inputFeedbackController.updateSystemPrefsState()
@@ -496,6 +515,7 @@ class FlorisImeService : LifecycleInputMethodService() {
     }
 
     override fun onWindowHidden() {
+        autoVoiceWindowVisible = false
         invalidateVoiceSessions(AudioSessionInvalidation.KEYBOARD_HIDE)
         super.onWindowHidden()
         if (windowController.onWindowHidden()) {
