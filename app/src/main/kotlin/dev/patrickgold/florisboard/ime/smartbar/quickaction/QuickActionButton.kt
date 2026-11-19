@@ -142,10 +142,10 @@ private suspend fun AwaitPointerEventScope.consumeUntilUp() {
 }
 
 internal const val QuickActionButtonAspectRatio = 1.1f
-internal const val SecondaryQuickActionButtonAspectRatio = 0.72f
+internal const val SecondaryQuickActionButtonAspectRatio = 1.0f
 
 internal val QuickActionButtonIconSize = 24.dp
-internal val SecondaryQuickActionButtonIconSize = 26.dp
+internal val SecondaryQuickActionButtonIconSize = 24.dp
 
 @Composable
 fun QuickActionButton(
