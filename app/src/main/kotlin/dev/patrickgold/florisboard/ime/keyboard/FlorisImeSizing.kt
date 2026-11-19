@@ -42,7 +42,13 @@ import dev.patrickgold.jetpref.datastore.model.collectAsState
 private val LocalKeyboardRowBaseHeight = compositionLocalOf { 65.dp }
 private val LocalSmartbarHeight = compositionLocalOf { 40.dp }
 
-private val SmartbarSecondaryActionRowExtraHeight = 0.dp
+/**
+ * The extended quick-actions strip is a toolbar, not another full letter-key row.
+ * Cap it at Android's 48dp comfortable touch-row size, while allowing users who
+ * deliberately shrink the entire keyboard to keep their smaller row height.
+ */
+internal fun compactSecondaryActionRowHeight(keyboardRowHeight: Dp): Dp =
+    minOf(keyboardRowHeight, 48.dp)
 
 object FlorisImeSizing {
     val keyboardRowBaseHeight: Dp
@@ -58,7 +64,7 @@ object FlorisImeSizing {
     val smartbarSecondaryActionRowHeight: Dp
         @Composable
         @ReadOnlyComposable
-        get() = keyboardRowBaseHeight + SmartbarSecondaryActionRowExtraHeight
+        get() = compactSecondaryActionRowHeight(keyboardRowBaseHeight)
 
     @Composable
     fun keyboardUiHeight(): Dp {
