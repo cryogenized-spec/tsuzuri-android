@@ -52,4 +52,13 @@ class AutoVoiceCapturePolicyTest : FunSpec({
         allowed(enabled = true, active = true) shouldBe false
         allowed(enabled = true, stopped = true) shouldBe false
     }
+    test("upgraded blank backend resolves through cloud preflight, never directly to a recorder") {
+        AutoVoiceCapturePolicy.backendForAuto("") shouldBe TranscriptionBackend.CLOUD
+        AutoVoiceCapturePolicy.backendForAuto("cloud") shouldBe TranscriptionBackend.CLOUD
+        AutoVoiceCapturePolicy.backendForAuto("orukeet") shouldBe TranscriptionBackend.ORUKEET
+        AutoVoiceCapturePolicy.backendForAuto("external") shouldBe TranscriptionBackend.UNAVAILABLE
+        AutoVoiceCapturePolicy.backendForAuto("mock") shouldBe TranscriptionBackend.UNAVAILABLE
+        // Even with a legacy cloud preference, a missing API key fails preflight closed.
+        allowed(enabled = true, configured = false) shouldBe false
+    }
 })
