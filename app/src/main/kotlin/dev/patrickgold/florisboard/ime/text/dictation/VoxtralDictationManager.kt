@@ -150,19 +150,6 @@ class VoxtralDictationManager(
     private var activeLease: AudioSessionLease? = null
     private var operationJob: Job? = null
 
-    init {
-        // Migrate on IO and under the same host-switch lock as cloud sessions.
-        scope.launch(Dispatchers.IO) { migrateLegacyApiKeyIfNeeded() }
-        scope.launch {
-            aiAvailabilityPolicy.state.collectLatest { availability ->
-                autoCaptureCoordinator.onAvailabilityChanged(availability is AiAvailability.Available)
-                if (availability is AiAvailability.Unavailable && activeLease != null) {
-                    cancelDictation()
-                }
-            }
-        }
-    }
-
     private val _stateFlow = MutableStateFlow(DictationState.IDLE)
     val stateFlow: StateFlow<DictationState> = _stateFlow
 
@@ -202,6 +189,19 @@ class VoxtralDictationManager(
             },
             start = ::startListening,
         )
+    }
+
+    init {
+        // Migrate on IO and under the same host-switch lock as cloud sessions.
+        scope.launch(Dispatchers.IO) { migrateLegacyApiKeyIfNeeded() }
+        scope.launch {
+            aiAvailabilityPolicy.state.collectLatest { availability ->
+                autoCaptureCoordinator.onAvailabilityChanged(availability is AiAvailability.Available)
+                if (availability is AiAvailability.Unavailable && activeLease != null) {
+                    cancelDictation()
+                }
+            }
+        }
     }
 
     /**
