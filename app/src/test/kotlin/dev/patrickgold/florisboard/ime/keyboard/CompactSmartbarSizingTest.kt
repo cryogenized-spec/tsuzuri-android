@@ -9,9 +9,13 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 
 class CompactSmartbarSizingTest : FunSpec({
-    test("extended toolbar has a 48dp touch row instead of a full 65dp key row") {
-        compactSecondaryActionRowHeight(65.dp) shouldBe 48.dp
-        compactSecondaryActionRowHeight(60.dp) shouldBe 48.dp
+    test("themed 3dp vertical margins leave a 48dp tappable row") {
+        compactSecondaryActionRowHeight(65.dp) shouldBe 54.dp
+        compactSecondaryActionRowHeight(60.dp) shouldBe 54.dp
+        // Content after Signal/glass themes subtract 3dp at top and bottom.
+        (compactSecondaryActionRowHeight(65.dp) - 6.dp) shouldBe SecondaryToolbarContentTouchHeight
+        // At the supported 200% toolbar icon scale, 24dp icons use 48dp.
+        SecondaryToolbarContentTouchHeight shouldBe 24.dp * 2
     }
 
     test("shorter keyboard layouts are not inflated by the toolbar") {
@@ -20,6 +24,6 @@ class CompactSmartbarSizingTest : FunSpec({
     }
 
     test("tall keyboard and orientation adjustments do not make shortcut bar grow") {
-        compactSecondaryActionRowHeight(90.dp) shouldBe 48.dp
+        compactSecondaryActionRowHeight(90.dp) shouldBe 54.dp
     }
 })
