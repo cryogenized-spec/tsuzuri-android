@@ -246,7 +246,7 @@ fun VoxtralScreen() = FlorisScreen {
                 SwitchPreference(
                     pref = prefsRef.voxtral.autoVoiceCapture,
                     title = "Auto voice capture",
-                    summaryOn = "Auto ON: start listening in eligible text fields when the keyboard opens. " +
+                    summaryOn = "Auto ON: automatically start configured on-device or cloud dictation when the keyboard opens in eligible text fields. " +
                         "Stop ends capture until the keyboard is dismissed and opened again. " +
                         "Never records in secure or incognito fields.",
                     summaryOff = "Manual (default): tap the microphone to start, tap Stop to transcribe. " +
