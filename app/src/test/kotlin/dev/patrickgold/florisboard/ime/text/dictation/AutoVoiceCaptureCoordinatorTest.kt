@@ -176,4 +176,41 @@ class AutoVoiceCaptureCoordinatorTest : FunSpec({
             }
         }
     }
+    test("Auto waits for local model reconciliation and starts only if focus is still current") {
+        runTest {
+            val modelReady = CompletableDeferred<Boolean>()
+            val started = mutableListOf<TranscriptionBackend>()
+            val gate = AutoVoiceCaptureCoordinator(
+                scope = this,
+                current = { base().copy(backend = TranscriptionBackend.ORUKEET) },
+                configured = { modelReady.await() },
+                start = { started += it },
+            )
+            gate.onKeyboardFocus(true)
+            runCurrent()
+            started shouldBe emptyList()
+            modelReady.complete(true)
+            runCurrent()
+            started shouldBe listOf(TranscriptionBackend.ORUKEET)
+        }
+    }
+
+    test("hiding during local model reconciliation must not start even when model becomes ready") {
+        runTest {
+            val modelReady = CompletableDeferred<Boolean>()
+            var starts = 0
+            val gate = AutoVoiceCaptureCoordinator(
+                scope = this,
+                current = { base().copy(backend = TranscriptionBackend.ORUKEET) },
+                configured = { modelReady.await() },
+                start = { starts++ },
+            )
+            gate.onKeyboardFocus(true)
+            runCurrent()
+            gate.onSessionInvalidated(keyboardHidden = true)
+            modelReady.complete(true)
+            runCurrent()
+            starts shouldBe 0
+        }
+    }
 })
