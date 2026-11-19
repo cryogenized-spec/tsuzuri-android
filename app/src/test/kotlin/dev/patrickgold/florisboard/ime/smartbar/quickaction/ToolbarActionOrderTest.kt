@@ -57,4 +57,33 @@ class ToolbarActionOrderTest : FunSpec({
         original.showToolbarAction(0) shouldBe original
         original.copy(stickyAction = null).unpinToolbarAction() shouldBe original.copy(stickyAction = null)
     }
+    test("queued moves resolve the original action against each latest arrangement") {
+        // Simulates two queued clicks on the same Compose arrow before recomposition.
+        val actionFromOldFrame = copy
+        val first = original.moveToolbarAction(actionFromOldFrame, 1)
+        val second = first.moveToolbarAction(actionFromOldFrame, 1)
+        first.dynamicActions shouldBe listOf(paste, copy, undo)
+        second.dynamicActions shouldBe listOf(paste, undo, copy)
+        // The old index based implementation would have returned to the original order.
+        second.moveToolbarAction(actionFromOldFrame, 1) shouldBe second
+    }
+
+    test("queued hide and pin never target a different shortcut after a prior change") {
+        val first = original.hideToolbarAction(copy)
+        first.hideToolbarAction(copy) shouldBe first
+        first.pinToolbarAction(paste).stickyAction shouldBe paste
+        first.hideToolbarAction(undo).dynamicActions shouldBe listOf(paste)
+        // A stale UI tap on an already-hidden button is safe.
+        first.pinToolbarAction(copy) shouldBe first
+    }
+
+    test("restore, pin and unpin use identity even when the list has shifted") {
+        val hidden = original.hideToolbarAction(paste)
+        hidden.showToolbarAction(paste).dynamicActions shouldBe listOf(copy, undo, paste)
+        hidden.showToolbarAction(paste).showToolbarAction(paste) shouldBe hidden.showToolbarAction(paste)
+        val changed = original.pinToolbarAction(undo)
+        changed.unpinToolbarAction(settings) shouldBe changed
+        changed.unpinToolbarAction(undo).stickyAction shouldBe null
+    }
+
 })
