@@ -1,5 +1,5 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
-    <string name="app_name">Ownkey Keyboard</string>
+    <string name="app_name">Tsuzuri Keyboard</string>
 
     <string name="key__phone_pause" comment="Label for the Pause key in the telephone keyboard layout">Pause</string>
     <string name="key__phone_wait" comment="Label for the Wait key in the telephone keyboard layout">Wait</string>
@@ -148,15 +148,15 @@
     <string name="settings__default" comment="General string which is used when a preference has the default value set">Default</string>
     <string name="settings__system_default" comment="General string which is used when a preference has the system default value set">System default</string>
 
-    <string name="settings__home__title" comment="Title of the Home screen">Ownkey</string>
-    <string name="settings__home__ime_not_enabled" comment="Error message shown in Home fragment when Ownkey Keyboard is not enabled in the system">Ownkey Keyboard is not enabled in the system and thus won\'t be available as an input method in the input picker. Click here to resolve this issue.</string>
-    <string name="settings__home__ime_not_selected" comment="Warning message shown in Home fragment when Ownkey Keyboard is not selected as the default keyboard">Ownkey Keyboard is not selected as the default input method. Click here to resolve this issue.</string>
+    <string name="settings__home__title" comment="Title of the Home screen">Tsuzuri</string>
+    <string name="settings__home__ime_not_enabled" comment="Error message shown in Home fragment when Tsuzuri Keyboard is not enabled in the system">Tsuzuri Keyboard is not enabled in the system and thus won\'t be available as an input method in the input picker. Click here to resolve this issue.</string>
+    <string name="settings__home__ime_not_selected" comment="Warning message shown in Home fragment when Tsuzuri Keyboard is not selected as the default keyboard">Tsuzuri Keyboard is not selected as the default input method. Click here to resolve this issue.</string>
 
     <!-- Home -->
-    <string name="settings__home__off_title" comment="Home setup notice title when the keyboard is not enabled in the system">Ownkey is off</string>
+    <string name="settings__home__off_title" comment="Home setup notice title when the keyboard is not enabled in the system">Tsuzuri is off</string>
     <string name="settings__home__off_body" comment="Home setup notice body when the keyboard is not enabled in the system">Turn it on in system settings to start typing.</string>
     <string name="settings__home__off_action" comment="Button that opens the system keyboard settings">Turn on</string>
-    <string name="settings__home__not_selected_title" comment="Home setup notice title when another keyboard is selected">Ownkey isn\'t your keyboard</string>
+    <string name="settings__home__not_selected_title" comment="Home setup notice title when another keyboard is selected">Tsuzuri isn\'t your keyboard</string>
     <string name="settings__home__not_selected_action" comment="Button that opens the keyboard picker">Switch keyboard</string>
     <string name="settings__home__ai" comment="Title of the AI card on Home">AI</string>
     <string name="settings__home__ai_dictation" comment="Label of the dictation line in the Home AI card">Dictation</string>
@@ -214,7 +214,7 @@
     <string name="settings__localization__subtype_delete_confirmation_warning" comment="Warning message in the confirmation dialog to confirm the user's intent to delete">Are you sure you want to delete this subtype?</string>
 
     <!-- Languages -->
-    <string name="settings__languages__empty">No languages added. Ownkey types in English (QWERTY) until you add one.</string>
+    <string name="settings__languages__empty">No languages added. Tsuzuri types in English (QWERTY) until you add one.</string>
     <string name="settings__languages__list_footer">Tap a language to change its layout. Touch and hold to remove it.</string>
     <string name="settings__languages__add">Add language</string>
     <string name="settings__languages__group_advanced">Advanced</string>
@@ -256,7 +256,7 @@
     <string name="pref__theme__toolbar_icon_color__label" comment="Label for toolbar icon color preference">Toolbar icon color</string>
     <string name="pref__theme__custom_themes__label" comment="Preference title">Custom themes</string>
     <string name="pref__theme__custom_themes__summary" comment="Preference summary">Create your own theme and edit every property in the theme editor</string>
-    <string name="enum__theme_glass_preset__signal" comment="Enum value label. Signal is the name of the Ownkey brand theme.">Signal Graphite (default)</string>
+    <string name="enum__theme_glass_preset__signal" comment="Enum value label. Signal is the name of the Tsuzuri brand theme.">Signal Graphite (default)</string>
     <string name="enum__theme_glass_preset__signal_black" comment="Enum value label">Signal Black (OLED)</string>
     <string name="enum__theme_glass_preset__glass" comment="Enum value label">Glass</string>
     <string name="enum__theme_glass_preset__amoled" comment="Enum value label">AMOLED black</string>
@@ -275,7 +275,7 @@
         Accent color
     </string>
     <string name="settings__theme_manager__title_manage" comment="Title of the theme manager screen for managing installed and custom themes">Manage installed themes</string>
-    <string name="pref__theme__source_assets" comment="Label for the theme source field">Ownkey Keyboard App Assets</string>
+    <string name="pref__theme__source_assets" comment="Label for the theme source field">Tsuzuri Keyboard App Assets</string>
     <string name="pref__theme__source_internal" comment="Label for the theme source field">Internal Storage</string>
     <string name="pref__theme__source_external" comment="Label for the theme source field">External Provider</string>
 
@@ -633,7 +633,7 @@
     <string name="settings__keyboard__reset_toolbar_confirm_text" comment="Confirm dialog text">The toolbar goes back to the default buttons in their default order.</string>
     <string name="settings__keyboard__reset_toolbar_done" comment="Toast after resetting the toolbar">Toolbar actions reset</string>
     <string name="settings__keyboard__physical_keyboard" comment="Switch title">Physical keyboard</string>
-    <string name="settings__keyboard__physical_keyboard_summary" comment="Summary of the physical keyboard switch">Keep Ownkey on screen when one is connected</string>
+    <string name="settings__keyboard__physical_keyboard_summary" comment="Summary of the physical keyboard switch">Keep Tsuzuri on screen when one is connected</string>
     <string name="settings__keyboard__reset_window" comment="Row title">Reset size and position</string>
     <string name="settings__keyboard__reset_window_confirm_title" comment="Confirm dialog title">Reset size and position?</string>
     <string name="settings__keyboard__reset_window_confirm_text" comment="Confirm dialog text">The keyboard goes back to its default size, padding and place on the screen.</string>
@@ -777,7 +777,7 @@
 
     <!-- Saved words -->
     <string name="settings__typing__saved_words_footer">Your words and the system dictionary shape suggestions while you type. The personal dictionary is for dictation, but spell check and autocorrect also leave its words alone.</string>
-    <string name="settings__typing__your_words_summary">Words you added to Ownkey</string>
+    <string name="settings__typing__your_words_summary">Words you added to Tsuzuri</string>
     <string name="settings__typing__system_dictionary_summary">Words saved on your phone</string>
     <string name="settings__typing__personal_dictionary">Personal dictionary</string>
     <string name="settings__typing__personal_dictionary_summary">Names and spellings for dictation</string>
@@ -855,7 +855,7 @@
     <string name="settings__keyboard__gesture_previous_language" comment="Gesture action, shown as a row value; keep it short">Previous language</string>
     <string name="settings__keyboard__gesture_previous_language_description" comment="Gesture action description in the choice sheet">Switches back to your previous keyboard language.</string>
     <string name="settings__keyboard__gesture_last_keyboard" comment="Gesture action, shown as a row value; keep it short">Last keyboard</string>
-    <string name="settings__keyboard__gesture_last_keyboard_description" comment="Gesture action description in the choice sheet">Goes back to the keyboard you used before Ownkey.</string>
+    <string name="settings__keyboard__gesture_last_keyboard_description" comment="Gesture action description in the choice sheet">Goes back to the keyboard you used before Tsuzuri.</string>
     <string name="settings__keyboard__gesture_toggle_toolbar" comment="Gesture action, shown as a row value; keep it short">Toggle toolbar</string>
     <string name="settings__keyboard__gesture_toggle_toolbar_description" comment="Gesture action description in the choice sheet">Shows or hides the toolbar.</string>
     <string name="settings__keyboard__gesture_delete_characters" comment="Gesture action, shown as a row value; keep it short">Delete letters</string>
@@ -913,7 +913,7 @@
     <string name="pref__voxtral__permission__granted" comment="Status text shown when microphone permission is granted">Microphone permission granted.</string>
     <string name="pref__voxtral__permission__missing" comment="Status text shown when microphone permission is missing">Microphone permission not granted yet.</string>
     <string name="pref__voxtral__permission__grant_action" comment="Button label to request microphone permission">Grant microphone permission</string>
-    <string name="pref__ai__intro_title" comment="Title of the AI settings overview">Ownkey AI</string>
+    <string name="pref__ai__intro_title" comment="Title of the AI settings overview">Tsuzuri AI</string>
     <string name="pref__ai__overview_dictation" comment="Row label in the AI overview">Dictation</string>
     <string name="pref__ai__overview_rewrite" comment="Row label in the AI overview">Rewrite</string>
     <string name="pref__ai__overview_orukeet_missing" comment="AI overview value when Orukeet is chosen but can't dictate: its model is missing or the device can't run it">Orukeet (on device) · not ready</string>
@@ -941,8 +941,8 @@
     <string name="pref__ai__rewrite_key__label" comment="Label of the LLM rewrite API key text field">Rewrite API key</string>
     <string name="pref__ai__rewrite_key__status_set" comment="Status text when rewrite API key is configured">Rewrite API key saved.</string>
     <string name="pref__ai__rewrite_key__status_missing" comment="Status text when rewrite API key is missing">No rewrite API key yet.</string>
-    <string name="pref__ai__rewrite_key__hint" comment="Which key to paste; {provider} is a provider name">Use an API key from {provider}. Ownkey keeps one rewrite key, so replace it when you switch provider.</string>
-    <string name="pref__ai__rewrite_key__hint_custom" comment="Which key to paste for a custom endpoint">Use the key your endpoint expects. Ownkey keeps one rewrite key, so replace it when you switch provider.</string>
+    <string name="pref__ai__rewrite_key__hint" comment="Which key to paste; {provider} is a provider name">Use an API key from {provider}. Tsuzuri keeps one rewrite key, so replace it when you switch provider.</string>
+    <string name="pref__ai__rewrite_key__hint_custom" comment="Which key to paste for a custom endpoint">Use the key your endpoint expects. Tsuzuri keeps one rewrite key, so replace it when you switch provider.</string>
     <string name="pref__ai__rewrite_key__save_action" comment="Button label to save rewrite API key">Save rewrite key</string>
     <string name="pref__ai__rewrite_key__clear_action" comment="Button label to remove rewrite API key">Remove rewrite key</string>
     <string name="pref__ai__rewrite_provider__label" comment="Label for rewrite provider presets">Provider</string>
@@ -970,7 +970,7 @@
     <string name="settings__ai__address_error" comment="Error under a server address field that lacks http:// or https://">Start with https:// or http://</string>
 
     <!-- AI: Microphone -->
-    <string name="settings__ai__mic__notice" comment="Warning on the AI screen when microphone permission is missing">Ownkey needs the microphone to dictate.</string>
+    <string name="settings__ai__mic__notice" comment="Warning on the AI screen when microphone permission is missing">Tsuzuri needs the microphone to dictate.</string>
     <string name="settings__ai__mic__allow" comment="Action that asks for microphone permission">Allow</string>
 
     <!-- AI: Dictation -->
@@ -1068,8 +1068,8 @@
     <string name="settings__ai__rewrite__title" comment="Group header of the rewrite settings">Rewrite</string>
     <string name="settings__ai__rewrite_provider__title" comment="Title of the rewrite provider sheet">Rewrite provider</string>
     <string name="settings__ai__rewrite_key__title" comment="Title of the rewrite key dialog">Rewrite API key</string>
-    <string name="settings__ai__rewrite_key__help" comment="Rewrite key dialog text; {provider} is a provider name such as OpenAI">Get a key from {provider}. A ChatGPT or Claude subscription doesn\'t include one. Ownkey keeps one rewrite key, so replace it when you switch provider.</string>
-    <string name="settings__ai__rewrite_key__help_custom" comment="Rewrite key dialog text for a custom server">Use the key your server expects. Ownkey keeps one rewrite key, so replace it when you switch provider.</string>
+    <string name="settings__ai__rewrite_key__help" comment="Rewrite key dialog text; {provider} is a provider name such as OpenAI">Get a key from {provider}. A ChatGPT or Claude subscription doesn\'t include one. Tsuzuri keeps one rewrite key, so replace it when you switch provider.</string>
+    <string name="settings__ai__rewrite_key__help_custom" comment="Rewrite key dialog text for a custom server">Use the key your server expects. Tsuzuri keeps one rewrite key, so replace it when you switch provider.</string>
     <string name="settings__ai__rewrite_model__row" comment="Row for the rewrite model">Model</string>
     <string name="settings__ai__rewrite_model__default" comment="Rewrite model row value when the provider's default model is used">Default</string>
     <string name="settings__ai__rewrite_model__title" comment="Title of the rewrite model dialog">Rewrite model</string>
@@ -1114,7 +1114,7 @@
 
     <!-- Voice rewrite (in-keyboard) UI strings -->
     <string name="voice_rewrite__provider_custom" comment="Provider display name shown when the configured transcription endpoint is not a known provider">Custom endpoint</string>
-    <string name="voice_rewrite__card_title" comment="Title of the pinned voice instruction card in the rewrite hub">Tell Ownkey what to change</string>
+    <string name="voice_rewrite__card_title" comment="Title of the pinned voice instruction card in the rewrite hub">Tell Tsuzuri what to change</string>
     <plurals name="voice_rewrite__card_summary_selection" comment="Supporting copy on the voice card when text is selected">
         <item quantity="one">{count} character selected · review before replacing</item>
         <item quantity="other">{count} characters selected · review before replacing</item>
@@ -1190,7 +1190,7 @@
 
     <!-- Voice rewrite first-use disclosure -->
     <string name="voice_rewrite__disclosure_title">How voice rewrite works</string>
-    <string name="voice_rewrite__disclosure_body">Your recorded instruction goes to the dictation provider you configured. The selected text and the recognized instruction then go to the rewrite provider you configured. Ownkey does not run a relay and does not process these requests itself.</string>
+    <string name="voice_rewrite__disclosure_body">Your recorded instruction goes to the dictation provider you configured. The selected text and the recognized instruction then go to the rewrite provider you configured. Tsuzuri does not run a relay and does not process these requests itself.</string>
     <string name="voice_rewrite__disclosure_audio_row" comment="Audio provider row in the first-use disclosure">Audio → {provider}</string>
     <string name="voice_rewrite__disclosure_text_row" comment="Rewrite provider row in the first-use disclosure">Text → {provider}</string>
 
@@ -1238,7 +1238,7 @@
 
     <!-- About UI strings -->
     <string name="about__title" comment="Title of About activity">About</string>
-    <string name="about__app_icon_content_description" comment="Content description of app icon in About">App icon of Ownkey Keyboard</string>
+    <string name="about__app_icon_content_description" comment="Content description of app icon in About">App icon of Tsuzuri Keyboard</string>
     <string name="about__view_licenses" comment="Label of View licenses button in About">Open source licenses</string>
     <string name="about__view_privacy_policy" comment="Label of View privacy policy button in About">Privacy policy</string>
     <string name="about__view_source_code" comment="Label of View source code button in About">Source code</string>
@@ -1254,15 +1254,15 @@
     <string name="about__repository__summary" comment="Preference summary">Source code, discussions, issues and info</string>
     <string name="about__privacy_policy__title" comment="Preference title">Privacy policy</string>
     <string name="about__privacy_policy__summary" comment="Preference summary">The privacy policy for this project</string>
-    <string name="about__project_license__title" comment="Preference title">Ownkey license</string>
-    <string name="about__project_license__summary" comment="Preference summary">Ownkey Keyboard is licensed under {license_name}</string>
+    <string name="about__project_license__title" comment="Preference title">Tsuzuri license</string>
+    <string name="about__project_license__summary" comment="Preference summary">Tsuzuri Keyboard is licensed under {license_name}</string>
     <string name="about__project_license__error_license_text_failed" comment="Error text for license text loading failure">Error: Failed to load license text.\n-&gt; Reason: {error_message}</string>
     <string name="about__project_license__error_reason_asset_manager_null" comment="Error text if asset manager is null">Asset manager reference is null</string>
     <string name="about__third_party_licenses__title" comment="Preference title">Third-party licenses</string>
     <string name="about__third_party_licenses__summary" comment="Preference summary">Licenses of the third-party libraries included in this app</string>
 
     <!-- About -->
-    <string name="about__app_name" translatable="false">Ownkey</string>
+    <string name="about__app_name" translatable="false">Tsuzuri</string>
     <string name="about__version_value">Version {version}</string>
     <string name="about__copy_version">Copy version</string>
     <string name="about__devtools_on">Developer tools on</string>
@@ -1280,17 +1280,17 @@
     <string name="about__ext__add_value" comment="Accessibility label of an add button next to a theme rule field; {name} is the field name">Add {name}</string>
 
     <!-- Setup UI strings -->
-    <string name="setup__title" comment="Title of Setup">Set up Ownkey</string>
+    <string name="setup__title" comment="Title of Setup">Set up Tsuzuri</string>
     <string name="setup__intro_message" comment="Short intro message welcoming new users">Turn it on, pick it, and you\'re typing.</string>
     <string name="setup__footer__privacy_policy" comment="Privacy policy label for URL">Privacy policy</string>
     <string name="setup__footer__repository" comment="Repository label for URL">Source code</string>
 
-    <string name="setup__enable_ime__title">Turn on Ownkey</string>
-    <string name="setup__enable_ime__description">Open system settings and switch on Ownkey.</string>
+    <string name="setup__enable_ime__title">Turn on Tsuzuri</string>
+    <string name="setup__enable_ime__description">Open system settings and switch on Tsuzuri.</string>
     <string name="setup__enable_ime__open_settings_btn">Open settings</string>
 
     <string name="setup__select_ime__title">Make it your keyboard</string>
-    <string name="setup__select_ime__description">Pick Ownkey in the keyboard list.</string>
+    <string name="setup__select_ime__description">Pick Tsuzuri in the keyboard list.</string>
     <string name="setup__select_ime__switch_keyboard_btn">Switch keyboard</string>
 
     <string name="setup__grant_microphone_permission__title">Allow the microphone</string>
@@ -1362,7 +1362,7 @@
     <string name="settings__privacy__incognito_always_summary">Always on. Dictation and rewrite stay off.</string>
     <string name="settings__privacy__personalized_summary">Learns from your typing on this phone</string>
     <string name="settings__privacy__clear_learned_title">Clear learned data?</string>
-    <string name="settings__privacy__clear_learned_message">Ownkey forgets the words and details it learned from your typing, such as email addresses. You can\'t undo this.</string>
+    <string name="settings__privacy__clear_learned_message">Tsuzuri forgets the words and details it learned from your typing, such as email addresses. You can\'t undo this.</string>
     <string name="settings__privacy__clear_learned_confirm">Clear</string>
     <string name="settings__privacy__back_up">Back up</string>
     <string name="settings__privacy__restore">Restore</string>
@@ -1375,19 +1375,19 @@
     <string name="settings__privacy__backup_footer">Backup files don\'t include API keys. Enter them again after a restore.</string>
 
     <!-- Crash Dialog strings -->
-    <string name="crash_dialog__title" comment="Title of crash dialog">Ownkey Keyboard error report</string>
-    <string name="crash_dialog__description" comment="Description of crash dialog">Sorry for the inconvenience, but Ownkey Keyboard has crashed due to an unexpected error.</string>
-    <string name="crash_dialog__report_instructions" comment="Issue tracker report instructions for the crash dialog. The %s placeholder is the name of the crash report template and always in English/LTR.">If you wish to report this error, first check out the issue tracker on GitHub if your crash has not already been reported.\nIf it hasn\'t, copy the generated crash log and open a new issue. Use the \"%s\" template and fill out the description, the steps to reproduce, and paste the generated crash log at the end. This helps in making Ownkey Keyboard better and more stable for everyone. Thank you!</string>
+    <string name="crash_dialog__title" comment="Title of crash dialog">Tsuzuri Keyboard error report</string>
+    <string name="crash_dialog__description" comment="Description of crash dialog">Sorry for the inconvenience, but Tsuzuri Keyboard has crashed due to an unexpected error.</string>
+    <string name="crash_dialog__report_instructions" comment="Issue tracker report instructions for the crash dialog. The %s placeholder is the name of the crash report template and always in English/LTR.">If you wish to report this error, first check out the issue tracker on GitHub if your crash has not already been reported.\nIf it hasn\'t, copy the generated crash log and open a new issue. Use the \"%s\" template and fill out the description, the steps to reproduce, and paste the generated crash log at the end. This helps in making Tsuzuri Keyboard better and more stable for everyone. Thank you!</string>
     <string name="crash_dialog__bug_report_template" comment="Name of the template to use in the GitHub issue tracker (is always in English)" translatable="false">Crash report</string>
     <string name="crash_dialog__copy_to_clipboard" comment="Label of Copy to clipboard button in crash dialog">Copy to system clipboard</string>
     <string name="crash_dialog__copy_to_clipboard_success" comment="Label of Copy to clipboard success message in crash dialog">Copied to system clipboard</string>
     <string name="crash_dialog__copy_to_clipboard_failure" comment="Label of Copy to clipboard failure message in crash dialog">Cannot copy to system clipboard: Clipboard manager instance not found</string>
     <string name="crash_dialog__open_issue_tracker" comment="Label of Open issue tracker button in crash dialog">Open issue tracker (github.com)</string>
     <string name="crash_dialog__close" comment="Label of Close button in crash dialog">Close</string>
-    <string name="crash_notification_channel__title" comment="Title of crash notification channel">Ownkey Keyboard error reports</string>
-    <string name="crash_once_notification__title" comment="Title of the notification for a single crash">Ownkey Keyboard has stopped working…</string>
+    <string name="crash_notification_channel__title" comment="Title of crash notification channel">Tsuzuri Keyboard error reports</string>
+    <string name="crash_once_notification__title" comment="Title of the notification for a single crash">Tsuzuri Keyboard has stopped working…</string>
     <string name="crash_once_notification__body" comment="Body of the notification for a single crash">Tap to view error details</string>
-    <string name="crash_multiple_notification__title" comment="Title of the notification for consecutive crashes">Ownkey Keyboard seems to stop working repeatedly…</string>
+    <string name="crash_multiple_notification__title" comment="Title of the notification for consecutive crashes">Tsuzuri Keyboard seems to stop working repeatedly…</string>
     <string name="crash_multiple_notification__body" comment="Body of the notification for consecutive crashes">Falling back to previous keyboard to stop infinite crash loop. Tap to view error details</string>
 
 
@@ -1455,7 +1455,7 @@
     <string name="settings__clipboard__after">After</string>
     <string name="settings__clipboard__clear_sensitive">Clear sensitive items</string>
     <string name="settings__clipboard__clear_sensitive_summary">Such as passwords and codes</string>
-    <string name="settings__clipboard__internal_summary">Copies made in Ownkey stay in Ownkey. Other apps can\'t paste them.</string>
+    <string name="settings__clipboard__internal_summary">Copies made in Tsuzuri stay in Tsuzuri. Other apps can\'t paste them.</string>
     <string name="settings__clipboard__internal_summary_synced" comment="Use internal clipboard summary while Sync to system clipboard still sends copies to Android">Sync to system clipboard still sends copies to Android\'s clipboard, so other apps can paste them.</string>
     <string name="settings__clipboard__skin_tone">Skin tone</string>
     <string name="settings__clipboard__recent_emoji">Recent emoji</string>
@@ -1579,7 +1579,7 @@
     <string name="ext__export__failure">Failed to export extension: {error_message}</string>
     <string name="ext__import__success">Successfully imported extension!</string>
     <string name="ext__import__failure">Failed to import extension: {error_message}</string>
-    <string name="ext__import__ext_any" comment="Title of Importer screen for import of any supported Ownkey Keyboard extension">Import extension</string>
+    <string name="ext__import__ext_any" comment="Title of Importer screen for import of any supported Tsuzuri Keyboard extension">Import extension</string>
     <string name="ext__import__ext_keyboard" comment="Title of Importer screen for keyboard extension import">Import keyboard extension</string>
     <string name="ext__import__ext_theme" comment="Title of Importer screen for theme extension import">Import theme extension</string>
     <string name="ext__import__ext_languagepack" comment="Title of Importer screen for language pack extension import">Import language pack extension</string>
@@ -1619,7 +1619,7 @@
     <string name="ext__addon_management_box__managing_placeholder">Managing {extensions}</string>
     <string name="ext__addon_management_box__addon_manager_info">All tasks related to importing, exporting, creating, customizing, and removing extensions can be handled through the centralized addon manager.</string>
     <string name="ext__addon_management_box__go_to_page">Go to {ext_home_title}</string>
-    <string name="ext__home__info">You can download and install extensions from the Ownkey Keyboard Addons Store or import any extension file you have downloaded from the internet.</string>
+    <string name="ext__home__info">You can download and install extensions from the Tsuzuri Keyboard Addons Store or import any extension file you have downloaded from the internet.</string>
     <string name="ext__home__visit_store">Visit Addons Store</string>
     <string name="ext__home__manage_extensions">Manage installed extensions</string>
     <string name="ext__list__view_details">View details</string>
@@ -1999,7 +1999,7 @@
     <string name="speech_dictionary__error_duplicate_correction">There is already a correction for this. Edit that one instead.</string>
     <string name="speech_dictionary__entries_title">Your entries</string>
     <string name="speech_dictionary__entries_empty">No entries yet. Names, product terms and recurring mishearings are good first candidates.</string>
-    <string name="speech_dictionary__entries_example">Examples: Ownkey · Orukeet · “own key” → Ownkey</string>
+    <string name="speech_dictionary__entries_example">Examples: Tsuzuri · Orukeet · “own key” → Tsuzuri</string>
     <string name="speech_dictionary__words_heading">Words ({count})</string>
     <string name="speech_dictionary__corrections_heading">Corrections ({count})</string>
     <string name="speech_dictionary__search_label">Search entries</string>
@@ -2040,7 +2040,7 @@
     <string name="speech_dictionary__hints_cloud_prompt_summary">For OpenAI-compatible servers that accept a prompt. A server that doesn\'t may reject the request.</string>
     <string name="speech_dictionary__hints_cloud_off">Do not send words</string>
     <string name="speech_dictionary__hints_cloud_off_summary">Corrections and filler removal still run on this phone.</string>
-    <string name="speech_dictionary__hints_cloud_auto_unsupported">Ownkey doesn\'t know your server, so Automatic sends it no words. Pick Send as prompt if it accepts a prompt.</string>
+    <string name="speech_dictionary__hints_cloud_auto_unsupported">Tsuzuri doesn\'t know your server, so Automatic sends it no words. Pick Send as prompt if it accepts a prompt.</string>
     <string name="speech_dictionary__hints_cloud_budget_exceeded">{included} of {total} words fit one cloud request. The rest stay saved but are not sent.</string>
     <string name="speech_dictionary__hints_local_label">On-device dictation (Orukeet)</string>
     <string name="speech_dictionary__hints_local_toggle">Use words for on-device recognition</string>
@@ -2051,7 +2051,7 @@
     </plurals>
     <string name="speech_dictionary__hints_local_budget_exceeded">{included} of {total} words fit the on-device hint budget. The rest stay saved but are not sent to Orukeet.</string>
     <string name="speech_dictionary__load_error">Your saved dictionary could not be read. A copy was kept next to the new file, and the entries start empty.</string>
-    <string name="speech_dictionary__load_error_newer">Your saved dictionary was written by a newer version of Ownkey. It was kept next to the new file and is not changed; update the app to use it again. The entries start empty until then.</string>
+    <string name="speech_dictionary__load_error_newer">Your saved dictionary was written by a newer version of Tsuzuri. It was kept next to the new file and is not changed; update the app to use it again. The entries start empty until then.</string>
     <string name="speech_dictionary__save_error">The last change could not be saved to storage. It is kept for now and saving is retried with the next change. Check free space.</string>
     <string name="speech_dictionary__only_fillers">Only filler words were heard. Nothing was inserted.</string>
     <string name="speech_dictionary__ai_card_summary">Names and terms for recognition, corrections for recurring mishearings, and filler-word removal.</string>
@@ -2094,9 +2094,9 @@
     <string name="dictation_fix__manual_open">Open dictionary</string>
     <string name="floating_split__opacity">Floating split background opacity</string>
 
-    <!-- Shared Ownkey settings components -->
+    <!-- Shared Tsuzuri settings components -->
     <string name="ownkey_ui__back">Back</string>
-    <string name="ownkey_ui__preview_field_label">Try Ownkey here</string>
+    <string name="ownkey_ui__preview_field_label">Try Tsuzuri here</string>
     <string name="ownkey_ui__choose_keyboard">Choose keyboard</string>
     <string name="ownkey_ui__choice_unavailable" comment="Accessibility state of a dictation choice that can't be picked yet; tapping it runs the fix named in its note">Unavailable</string>
 </resources>

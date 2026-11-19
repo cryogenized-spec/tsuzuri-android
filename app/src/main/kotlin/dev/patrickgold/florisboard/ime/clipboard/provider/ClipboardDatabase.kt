@@ -18,11 +18,11 @@ package dev.patrickgold.florisboard.ime.clipboard.provider
 
 import android.content.ClipData
 import android.content.ClipDescription.EXTRA_IS_REMOTE_DEVICE
-import android.content.ClipDescription.EXTRA_IS_SENSITIVE
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 import android.net.Uri
+import android.os.PersistableBundle
 import android.provider.BaseColumns
 import android.provider.MediaStore.Images.Media
 import android.provider.OpenableColumns
@@ -47,6 +47,7 @@ import androidx.room.TypeConverters
 import androidx.room.Update
 import androidx.room.migration.AutoMigrationSpec
 import dev.patrickgold.florisboard.R
+import dev.patrickgold.florisboard.ime.clipboard.ClipboardRetentionPolicy
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -132,11 +133,10 @@ data class ClipboardItem @OptIn(ExperimentalSerializationApi::class) constructor
                 else -> ItemType.TEXT
             }
 
-            val isSensitive = if (AndroidVersion.ATLEAST_API33_T) {
-                data.description?.extras?.getBoolean(EXTRA_IS_SENSITIVE) ?: false
-            } else {
-                false
-            }
+            // Some apps set this documented literal extra on Android 8–12 too.
+            // It is a display hint, not proof that unflagged content is non-secret.
+            val isSensitive = data.description?.extras
+                ?.getBoolean(ClipboardRetentionPolicy.SENSITIVE_EXTRA) ?: false
 
             val isRemoteDevice = if (AndroidVersion.ATLEAST_API34_U) {
                 data.description?.extras?.getBoolean(EXTRA_IS_REMOTE_DEVICE) ?: false
@@ -210,7 +210,7 @@ data class ClipboardItem @OptIn(ExperimentalSerializationApi::class) constructor
      * Creates a new ClipData which has the same contents as this.
      */
     fun toClipData(context: Context): ClipData {
-        return when (type) {
+        val clip = when (type) {
             ItemType.TEXT -> {
                 ClipData.newPlainText(FLORIS_CLIP_LABEL, text)
             }
@@ -218,14 +218,22 @@ data class ClipboardItem @OptIn(ExperimentalSerializationApi::class) constructor
                 ClipData.newUri(context.contentResolver, FLORIS_CLIP_LABEL, uri)
             }
         }
+        if (isSensitive) {
+            val extras = clip.description.extras ?: PersistableBundle()
+            extras.putBoolean(ClipboardRetentionPolicy.SENSITIVE_EXTRA, true)
+            clip.description.extras = extras
+        }
+        return clip
     }
 
     /**
      * Instructs the content provider to delete this URI. If not an image, is a noop
      */
     fun close(context: Context) {
-        if (type == ItemType.IMAGE) {
-            tryOrNull { context.contentResolver.delete(this.uri!!, null, null) }
+        if ((type == ItemType.IMAGE || type == ItemType.VIDEO) &&
+            uri?.authority == ClipboardMediaProvider.AUTHORITY
+        ) {
+            tryOrNull { context.contentResolver.delete(uri, null, null) }
         }
     }
 

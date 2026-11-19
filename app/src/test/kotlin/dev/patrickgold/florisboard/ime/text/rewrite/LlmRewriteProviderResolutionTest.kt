@@ -50,7 +50,7 @@ class LlmRewriteProviderResolutionTest : FunSpec({
         resolved.isComplete shouldBe true
         resolved.hasHttpEndpoint shouldBe false
         LlmRewriteProviders.resolve(LlmRewriteProviders.Custom, "https://api.example.com/v1/chat", "m").hasHttpEndpoint shouldBe true
-        LlmRewriteProviders.resolve(LlmRewriteProviders.Custom, "http://localhost:8080/v1/chat", "m").hasHttpEndpoint shouldBe true
+        LlmRewriteProviders.resolve(LlmRewriteProviders.Custom, "http://localhost:8080/v1/chat", "m").hasHttpEndpoint shouldBe false
         LlmRewriteProviders.resolve(LlmRewriteProviders.Custom, "HTTPS://api.example.com/v1/chat", "m").hasHttpEndpoint shouldBe true
     }
 

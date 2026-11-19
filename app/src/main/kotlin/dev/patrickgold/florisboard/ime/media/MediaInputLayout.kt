@@ -28,10 +28,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,6 +54,8 @@ import dev.patrickgold.florisboard.ime.keyboard.KeyData
 import dev.patrickgold.florisboard.ime.media.emoji.EmojiData
 import dev.patrickgold.florisboard.ime.media.emoji.EmojiPaletteView
 import dev.patrickgold.florisboard.ime.media.emoji.EmojiSearchField
+import dev.patrickgold.florisboard.ime.media.stickers.StickerPalette
+import dev.patrickgold.florisboard.ime.media.stickers.openStickerLibrary
 import dev.patrickgold.florisboard.ime.text.keyboard.TextKeyData
 import dev.patrickgold.florisboard.ime.theme.FlorisImeUi
 import dev.patrickgold.florisboard.keyboardManager
@@ -69,6 +73,7 @@ fun MediaInputLayout(
     val keyboardManager by context.keyboardManager()
 
     var emojiLayoutDataMap by remember { mutableStateOf(EmojiData.Fallback) }
+    var stickersSelected by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         emojiLayoutDataMap = EmojiData.get(context, "ime/media/emoji/root.txt")
     }
@@ -79,10 +84,14 @@ fun MediaInputLayout(
             .fillMaxWidth()
             .height(FlorisImeSizing.imeUiHeight()),
     ) {
-        EmojiPaletteView(
-            modifier = Modifier.weight(1f),
-            fullEmojiMappings = emojiLayoutDataMap,
-        )
+        if (stickersSelected) {
+            StickerPalette(modifier = Modifier.weight(1f))
+        } else {
+            EmojiPaletteView(
+                modifier = Modifier.weight(1f),
+                fullEmojiMappings = emojiLayoutDataMap,
+            )
+        }
         SnyggRow(
             elementName = FlorisImeUi.MediaBottomRow.elementName,
             modifier = Modifier
@@ -100,12 +109,28 @@ fun MediaInputLayout(
                     fontWeight = FontWeight.Medium,
                 )
             }
-            EmojiSearchField(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp),
-                onClick = { keyboardManager.startEmojiSearch() },
-            )
+            TextButton(
+                onClick = { stickersSelected = false },
+                modifier = Modifier.fillMaxHeight(),
+            ) { Text(if (stickersSelected) "Emoji" else "● Emoji") }
+            TextButton(
+                onClick = { stickersSelected = true },
+                modifier = Modifier.fillMaxHeight(),
+            ) { Text(if (stickersSelected) "● Stickers" else "Stickers") }
+            if (stickersSelected) {
+                Spacer(Modifier.weight(1f))
+                TextButton(
+                    onClick = { openStickerLibrary(context) },
+                    modifier = Modifier.fillMaxHeight(),
+                ) { Text("Manage") }
+            } else {
+                EmojiSearchField(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 4.dp),
+                    onClick = { keyboardManager.startEmojiSearch() },
+                )
+            }
             KeyboardLikeButton(
                 elementName = FlorisImeUi.MediaBottomRowButton.elementName,
                 inputEventDispatcher = keyboardManager.inputEventDispatcher,

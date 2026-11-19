@@ -196,6 +196,16 @@ fun KeyboardScreen() = FlorisScreen {
                     scope.launch { prefs.keyboard.fontSizeMultiplierLandscape.set(writes.landscape) }
                 },
             )
+            SwitchPreference(
+                prefs.keyboard.editingShortcutsEnabled,
+                title = "A / X / C / V shortcuts",
+                summary = "Hold A to select all, X to cut, C to copy, V to paste. Language accents stay available.",
+            )
+            SwitchPreference(
+                prefs.keyboard.spacebarDpadEnabled,
+                title = "Spacebar directional pad",
+                summary = "Off by default. Hold Space to open arrow controls; hold an arrow to repeat movement.",
+            )
             DialogSliderPreference(
                 prefs.keyboard.longPressDelay,
                 title = stringRes(R.string.settings__keyboard__long_press_delay),

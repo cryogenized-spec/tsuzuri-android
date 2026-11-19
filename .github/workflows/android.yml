@@ -1,176 +1,152 @@
-name: Ownkey Android CI
+name: Tsuzuri Android — strict quality gate
 
 on:
-  push:
-    tags:
-      - "v*"
   pull_request:
-    branches: [ main ]
-  # Only merged code is built with the target event's write-capable token.
-  pull_request_target:
-    branches: [ main ]
-    types: [ closed ]
+    # Run checks for stacked Android PRs as well as the final PR to main.
+    branches: [main, 'feat/**', 'fix/**']
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      build_type:
-        description: "APK build type"
-        required: false
-        default: "beta"
-        type: choice
-        options:
-          - debug
-          - beta
-          - release
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: tsuzuri-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    if: github.event_name != 'pull_request_target' || github.event.pull_request.merged == true
+  source-contract:
+    name: Source and security policy
     runs-on: ubuntu-latest
-    concurrency:
-      group: android-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event_name == 'pull_request_target' && 'ci-debug' || github.ref }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
-          # Concurrency keeps only one pending run. Even an old rerun that takes that
-          # slot must build the current main tip rather than displacing a newer merge.
-          ref: ${{ github.event_name == 'pull_request_target' && 'refs/heads/main' || github.sha }}
-          submodules: recursive
+          persist-credentials: false
+      - name: Security-critical source contract
+        run: python3 tools/ci/verify_source_contract.py
+
+  secret-scan:
+    name: Secret leak scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
           fetch-depth: 0
-
-      - name: Test rolling CI publication policy
-        run: bash .github/scripts/test-publish-ci-debug.sh
-
-      - name: Test phone ABI packaging
-        run: python3 .github/scripts/test-package-phone.py
-
-      - uses: gradle/actions/wrapper-validation@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: 17
-          distribution: temurin
-          cache: gradle
-
-      - name: Set up CMake and Ninja
-        uses: lukka/get-cmake@v4.0.2
-
-      - name: Resolve build tasks and version metadata
-        id: vars
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            BUILD_TYPE="${{ github.event.inputs.build_type }}"
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            BUILD_TYPE="release"
-          else
-            BUILD_TYPE="debug"
-          fi
-
-          BUILD_TYPE="${BUILD_TYPE,,}"
-          BUILD_TYPE_CAP="${BUILD_TYPE^}"
-          APP_APK_TASK=":app:assemble${BUILD_TYPE_CAP}"
-
-          if [[ "${BUILD_TYPE}" == "release" ]]; then
-            APP_BUNDLE_TASK=":app:bundleRelease"
-          else
-            APP_BUNDLE_TASK=""
-          fi
-
-          VERSION=$(grep '^projectVersionName=' gradle.properties | cut -d= -f2 | tr -d '\r')
-          COMMIT=$(git rev-parse HEAD)
-          SHORT_SHA="${COMMIT:0:7}"
-          echo "commit=${COMMIT}" >> "$GITHUB_OUTPUT"
-
-          echo "build_type=${BUILD_TYPE}" >> "$GITHUB_OUTPUT"
-          echo "app_apk_task=${APP_APK_TASK}" >> "$GITHUB_OUTPUT"
-          echo "app_bundle_task=${APP_BUNDLE_TASK}" >> "$GITHUB_OUTPUT"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-
-          echo "Selected app APK task: ${APP_APK_TASK}"
-          if [[ -n "${APP_BUNDLE_TASK}" ]]; then
-            echo "Selected app AAB task: ${APP_BUNDLE_TASK}"
-          fi
-          echo "Version: ${VERSION}"
-
-      - name: Build phone APK with Gradle
-        run: ./gradlew clean ${{ steps.vars.outputs.app_apk_task }} --stacktrace
-
-      - name: Run unit tests
-        run: ./gradlew :lib:prediction:test :app:testDebugUnitTest --stacktrace
-
-      - name: Build phone release AAB
-        if: ${{ steps.vars.outputs.app_bundle_task != '' }}
-        run: ./gradlew ${{ steps.vars.outputs.app_bundle_task }} -Pownkey.apkSplits=false --stacktrace
-
-      - name: Prepare versioned distributables
-        id: package
-        shell: bash
-        run: |
-          rm -rf dist
-          mkdir -p dist/phone
-
-          BUILD_TYPE="${{ steps.vars.outputs.build_type }}"
-          VERSION="${{ steps.vars.outputs.version }}"
-          SHORT_SHA="${{ steps.vars.outputs.short_sha }}"
-
-          python3 .github/scripts/package-phone.py --build-type "$BUILD_TYPE" --version "$VERSION" --sha "$SHORT_SHA" >> "$GITHUB_OUTPUT"
-
-          if [[ -n "${{ steps.vars.outputs.app_bundle_task }}" ]]; then
-            APP_AAB_SRC=$(ls app/build/outputs/bundle/release/*.aab | head -n1)
-            APP_AAB_NAME="ownkey-phone-release-v${VERSION}-${SHORT_SHA}.aab"
-            cp "$APP_AAB_SRC" "dist/phone/${APP_AAB_NAME}"
-            echo "app_aab=dist/phone/${APP_AAB_NAME}" >> "$GITHUB_OUTPUT"
-          fi
-
-          python3 - <<'PY'
-          import hashlib
-          from pathlib import Path
-          files = sorted(path for path in Path("dist").glob("*/*") if path.suffix in (".apk", ".aab"))
-          with Path("dist/SHA256SUMS").open("w") as output:
-              for path in files:
-                  with path.open("rb") as source:
-                      output.write(f"{hashlib.file_digest(source, 'sha256').hexdigest()}  {path.name}\n")
-          PY
-          echo "Prepared distributables:"
-          find dist -type f -maxdepth 3 | sort
-
-      - name: Upload phone APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ownkey-phone-${{ steps.vars.outputs.build_type }}-v${{ steps.vars.outputs.version }}
-          path: dist/phone/*.apk
-          if-no-files-found: error
-
-      - name: Upload phone release AAB artifact
-        if: ${{ steps.vars.outputs.app_bundle_task != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ownkey-phone-release-aab-v${{ steps.vars.outputs.version }}
-          path: ${{ steps.package.outputs.app_aab }}
-          if-no-files-found: error
-
-      - name: Update rolling CI debug prerelease after a PR merge
-        if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@v3
         env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD_COMMIT: ${{ steps.vars.outputs.commit }}
-          VERSION: ${{ steps.vars.outputs.version }}
-          PHONE_APK: ${{ steps.package.outputs.app_apk }}
-        run: bash .github/scripts/publish-ci-debug.sh
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish GitHub release assets (tag builds)
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
+  android:
+    name: Kotlin compile, lint, tests, debug APK
+    needs: [source-contract]
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v6
         with:
-          files: |
-            dist/SHA256SUMS
-            dist/phone/*.apk
-            dist/phone/*.aab
-          generate_release_notes: true
+          submodules: recursive
+          persist-credentials: false
+      - name: Install JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: temurin
+      - name: Configure Gradle and verify wrapper
+        uses: gradle/actions/setup-gradle@v6
+      - name: Configure CMake and Ninja
+        uses: lukka/get-cmake@v4.0.2
+      - name: Kotlin/Android static checks and compilation
+        run: ./gradlew :app:lintDebug :lib:prediction:test :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace --no-daemon --warning-mode=all
+      # Capture the complete inherited lint findings when the quality gate fails.
+      # This is diagnostic only: abortOnError and the merge gate stay enforced.
+      - name: Upload Android Lint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tsuzuri-android-lint-diagnostics
+          path: |
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-debug.xml
+            app/build/reports/lint-results-debug.txt
+          if-no-files-found: warn
+      - name: Upload debug builds
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tsuzuri-debug-apks
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/debug/**/*.apk
+          if-no-files-found: error
+      # Small phone-oriented handoff: choose the ARM64 APK instead of
+      # downloading all four ABI splits and the Android test runner.
+      - name: Upload ARM64 phone alpha APK
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tsuzuri-alpha-arm64-phone-apk
+          path: app/build/outputs/apk/debug/*arm64-v8a*.apk
+          if-no-files-found: error
+
+  android-instrumentation:
+    name: Android clipboard privacy tests
+    needs: [android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Install JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: temurin
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Enable KVM for Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run Android privacy integration tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_4
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.patrickgold.florisboard.TsuzuriClipboardSecurityTest --stacktrace --no-daemon
+      - name: Upload Android test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-privacy-test-failures
+          path: app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn
+
+  merge-gate:
+    name: Tsuzuri merge gate
+    if: always()
+    needs: [source-contract, secret-scan, android, android-instrumentation]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless every mandatory job succeeded
+        env:
+          SOURCE: ${{ needs.source-contract.result }}
+          SECRETS: ${{ needs.secret-scan.result }}
+          ANDROID: ${{ needs.android.result }}
+          INSTRUMENTATION: ${{ needs.android-instrumentation.result }}
+        run: |
+          test "$SOURCE" = 'success'
+          test "$SECRETS" = 'success'
+          test "$ANDROID" = 'success'
+          test "$INSTRUMENTATION" = 'success'
+          echo 'All automated Tsuzuri checks passed. External Codex/security review and manual device testing remain separate requirements.'

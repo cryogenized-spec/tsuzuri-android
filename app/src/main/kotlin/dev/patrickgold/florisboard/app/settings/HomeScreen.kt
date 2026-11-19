@@ -18,6 +18,7 @@ package dev.patrickgold.florisboard.app.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,12 +33,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -45,6 +55,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.patrickgold.florisboard.BuildConfig
@@ -57,14 +68,18 @@ import dev.patrickgold.florisboard.app.settings.voxtral.rememberAiStatus
 import dev.patrickgold.florisboard.app.settings.voxtral.toLine
 import dev.patrickgold.florisboard.app.ui.OwnkeyButton
 import dev.patrickgold.florisboard.app.ui.OwnkeyGroup
+import dev.patrickgold.florisboard.app.ui.OwnkeyChoiceListRow
+import dev.patrickgold.florisboard.app.ui.ChoiceOption
 import dev.patrickgold.florisboard.app.ui.OwnkeyRow
 import dev.patrickgold.florisboard.app.ui.OwnkeyStatusDot
 import dev.patrickgold.florisboard.app.ui.OwnkeyTone
 import dev.patrickgold.florisboard.ime.core.DisplayLanguageNamesIn
+import dev.patrickgold.florisboard.ime.keyboard.SplitLayoutMode
 import dev.patrickgold.florisboard.lib.compose.FlorisScreen
 import dev.patrickgold.florisboard.lib.util.InputMethodUtils
 import dev.patrickgold.florisboard.subtypeManager
 import dev.patrickgold.jetpref.datastore.model.collectAsState
+import kotlinx.coroutines.launch
 import org.florisboard.lib.compose.OwnkeyTokens
 import org.florisboard.lib.compose.ownkeyFocusRing
 import org.florisboard.lib.compose.stringRes
@@ -82,6 +97,8 @@ fun HomeScreen() = FlorisScreen {
     val context = LocalContext.current
 
     content {
+        // Avoid outer FlorisScreen receiver shadowing inside option lambdas.
+        val settingsPrefs = prefs
         val isOwnkeyEnabled by InputMethodUtils.observeIsFlorisboardEnabled(foregroundOnly = true)
         val isOwnkeySelected by InputMethodUtils.observeIsFlorisboardSelected(foregroundOnly = true)
         if (!isOwnkeyEnabled) {
@@ -100,11 +117,9 @@ fun HomeScreen() = FlorisScreen {
             )
         }
 
-        HomeAiCard(onClick = { navController.navigate(Routes.Settings.Voxtral) })
-
         val subtypeManager by context.subtypeManager()
         val subtypes by subtypeManager.subtypesFlow.collectFlowAsState()
-        val displayLanguageNamesIn by prefs.localization.displayLanguageNamesIn.collectAsState()
+        val displayLanguageNamesIn by settingsPrefs.localization.displayLanguageNamesIn.collectAsState()
         val languages = subtypes
             .map { subtype ->
                 when (displayLanguageNamesIn) {
@@ -116,9 +131,9 @@ fun HomeScreen() = FlorisScreen {
             .joinToString(", ")
             .ifBlank { null }
 
-        val themeMode by prefs.theme.mode.collectAsState()
-        val dayThemeId by prefs.theme.dayThemeId.collectAsState()
-        val nightThemeId by prefs.theme.nightThemeId.collectAsState()
+        val themeMode by settingsPrefs.theme.mode.collectAsState()
+        val dayThemeId by settingsPrefs.theme.dayThemeId.collectAsState()
+        val nightThemeId by settingsPrefs.theme.nightThemeId.collectAsState()
         val appearance = stringRes(
             when (AppearanceSummary.of(themeMode, dayThemeId, nightThemeId)) {
                 AppearanceSummary.GRAPHITE -> R.string.settings__appearance__graphite
@@ -129,6 +144,233 @@ fun HomeScreen() = FlorisScreen {
                 AppearanceSummary.CUSTOM -> R.string.settings__appearance__custom
             }
         )
+
+        // First-run evaluation takes two taps, rather than a tour through
+        // 70+ themes or a language-subtype editor. Each option is already built in.
+        val quickTryScope = rememberCoroutineScope()
+        val activeSubtype by subtypeManager.activeSubtypeFlow.collectFlowAsState()
+        val splitLayoutMode by settingsPrefs.keyboard.splitLayoutMode.collectAsState()
+        val windowConfigs by settingsPrefs.keyboard.windowConfig.collectAsState()
+        val configuration = LocalConfiguration.current
+        val oneHand = QuickHandPreset.of(
+            windowConfigs, configuration.screenWidthDp, configuration.screenHeightDp,
+        )
+        val storedHeight = QuickKeyboardHeight.shown(
+            windowConfigs, configuration.screenWidthDp, configuration.screenHeightDp,
+        )
+        var chosenHeight by remember(
+            storedHeight, configuration.screenWidthDp, configuration.screenHeightDp,
+        ) { mutableFloatStateOf(storedHeight.toFloat()) }
+        var showInputDemo by remember { mutableStateOf(false) }
+        var quickInputDemo by remember { mutableStateOf(QuickInputDemo.TEXT) }
+        var scratchInput by remember { mutableStateOf("") }
+
+        OwnkeyGroup(title = "Try the keyboard") {
+            OwnkeyChoiceListRow(
+                modifier = Modifier.testTag("quick-try-theme"),
+                title = "Appearance",
+                summary = "Choose a ready-made look. Try typing in the preview to see it immediately.",
+                options = listOf(
+                    ChoiceOption(QuickThemePreset.SYSTEM, "Follow my phone"),
+                    ChoiceOption(QuickThemePreset.GRAPHITE, "Graphite"),
+                    ChoiceOption(QuickThemePreset.BLACK, "OLED Black"),
+                    ChoiceOption(QuickThemePreset.BONE, "Warm Light"),
+                    ChoiceOption(QuickThemePreset.GLASS, "AMOLED Glass"),
+                    ChoiceOption<QuickThemePreset?>(null, "Browse all themes"),
+                ),
+                selected = QuickThemePreset.of(themeMode, dayThemeId, nightThemeId),
+                onSelect = { choice ->
+                    if (choice == null) {
+                        navController.navigate(Routes.Settings.Theme)
+                    } else {
+                        quickTryScope.launch {
+                            val writes = choice.writes()
+                            writes.mode?.let { settingsPrefs.theme.mode.set(it) }
+                            writes.glassPreset?.let { settingsPrefs.theme.glassPreset.set(it) }
+                            writes.dayThemeId?.let { settingsPrefs.theme.dayThemeId.set(it) }
+                            writes.nightThemeId?.let { settingsPrefs.theme.nightThemeId.set(it) }
+                        }
+                    }
+                },
+            )
+
+            OwnkeyChoiceListRow(
+                modifier = Modifier.testTag("quick-try-layout"),
+                title = "Keyboard layout",
+                summary = "Changes your current language's layout; other languages remain untouched.",
+                options = listOf(
+                    ChoiceOption(QuickLayoutPreset.QWERTY, "QWERTY"),
+                    ChoiceOption(QuickLayoutPreset.QWERTZ, "QWERTZ"),
+                    ChoiceOption(QuickLayoutPreset.AZERTY, "AZERTY"),
+                    ChoiceOption(QuickLayoutPreset.DVORAK, "Dvorak"),
+                    ChoiceOption(QuickLayoutPreset.COLEMAK, "Colemak"),
+                    ChoiceOption(QuickLayoutPreset.BEPO, "BÉPO"),
+                    ChoiceOption<QuickLayoutPreset?>(null, "All 77 character layouts"),
+                ),
+                selected = QuickLayoutPreset.of(activeSubtype.layoutMap.characters),
+                onSelect = { choice ->
+                    if (choice == null) {
+                        navController.navigate(Routes.Settings.Localization)
+                    } else {
+                        val updated = activeSubtype.copy(
+                            layoutMap = activeSubtype.layoutMap.copy(characters = choice.componentId),
+                        )
+                        if (subtypeManager.subtypes.any { it.id == activeSubtype.id }) {
+                            subtypeManager.modifySubtypeWithSameId(updated)
+                        } else {
+                            subtypeManager.addSubtype(updated)
+                        }
+                    }
+                },
+            )
+
+            OwnkeyChoiceListRow(
+                modifier = Modifier.testTag("quick-try-split"),
+                title = "Typing width",
+                summary = "Split keyboard for two thumbs, or keep a full-width keyboard.",
+                options = listOf(
+                    ChoiceOption(SplitLayoutMode.NEVER, "Full-width"),
+                    ChoiceOption(SplitLayoutMode.AUTO, "Split on tablets and foldables"),
+                    ChoiceOption(SplitLayoutMode.ALWAYS, "Split for two thumbs"),
+                ),
+                selected = splitLayoutMode,
+                onSelect = { chosen ->
+                    quickTryScope.launch {
+                        // Split and one-handed are alternative geometry modes.
+                        if (chosen != SplitLayoutMode.NEVER && oneHand != QuickHandPreset.FULL) {
+                            settingsPrefs.keyboard.windowConfig.set(
+                                QuickHandPreset.update(
+                                    settingsPrefs.keyboard.windowConfig.get(),
+                                    configuration.screenWidthDp,
+                                    configuration.screenHeightDp,
+                                    QuickHandPreset.FULL,
+                                ),
+                            )
+                        }
+                        settingsPrefs.keyboard.splitLayoutMode.set(chosen)
+                    }
+                },
+            )
+
+            OwnkeyChoiceListRow(
+                modifier = Modifier.testTag("quick-try-one-handed"),
+                title = "One-handed typing",
+                summary = "Shrink the keyboard so your thumb can reach every key.",
+                options = listOf(
+                    ChoiceOption(QuickHandPreset.FULL, "Full keyboard"),
+                    ChoiceOption(QuickHandPreset.LEFT, "Left thumb"),
+                    ChoiceOption(QuickHandPreset.RIGHT, "Right thumb"),
+                ),
+                selected = oneHand,
+                onSelect = { choice ->
+                    quickTryScope.launch {
+                        if (choice != QuickHandPreset.FULL) {
+                            settingsPrefs.keyboard.splitLayoutMode.set(SplitLayoutMode.NEVER)
+                        }
+                        settingsPrefs.keyboard.windowConfig.set(
+                            QuickHandPreset.update(
+                                settingsPrefs.keyboard.windowConfig.get(),
+                                configuration.screenWidthDp,
+                                configuration.screenHeightDp,
+                                choice,
+                            ),
+                        )
+                    }
+                },
+            )
+
+            Text(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                text = "Keyboard height · ${chosenHeight.roundToInt()}%",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Slider(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .testTag("quick-try-height"),
+                value = chosenHeight,
+                onValueChange = { chosenHeight = it },
+                onValueChangeFinished = {
+                    val percent = chosenHeight.roundToInt()
+                    quickTryScope.launch {
+                        settingsPrefs.keyboard.windowConfig.set(
+                            QuickKeyboardHeight.update(
+                                settingsPrefs.keyboard.windowConfig.get(),
+                                configuration.screenWidthDp,
+                                configuration.screenHeightDp,
+                                percent,
+                            ),
+                        )
+                    }
+                },
+                valueRange = QuickKeyboardHeight.MIN_PERCENT.toFloat()..
+                    QuickKeyboardHeight.MAX_PERCENT.toFloat(),
+                steps = 11,
+            )
+
+            OwnkeyRow(
+                modifier = Modifier.testTag("quick-try-input-modes"),
+                title = "Test number and phone keypads",
+                summary = "Try a real input field, not a static keyboard picture.",
+                value = if (showInputDemo) "Hide" else "Show",
+                onClick = {
+                    showInputDemo = !showInputDemo
+                    scratchInput = ""
+                },
+            )
+            if (showInputDemo) {
+                OwnkeyChoiceListRow(
+                    modifier = Modifier.testTag("quick-try-input-kind"),
+                    title = "Input field type",
+                    options = listOf(
+                        ChoiceOption(QuickInputDemo.TEXT, "Text"),
+                        ChoiceOption(QuickInputDemo.NUMBER, "Numbers"),
+                        ChoiceOption(QuickInputDemo.PHONE, "Phone dialpad"),
+                    ),
+                    selected = quickInputDemo,
+                    onSelect = {
+                        quickInputDemo = it
+                        scratchInput = ""
+                    },
+                )
+                OutlinedTextField(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .testTag("quick-try-input"),
+                    value = scratchInput,
+                    onValueChange = { scratchInput = it.take(80) },
+                    label = { Text("Try typing here") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = when (quickInputDemo) {
+                            QuickInputDemo.TEXT -> KeyboardType.Text
+                            QuickInputDemo.NUMBER -> KeyboardType.Number
+                            QuickInputDemo.PHONE -> KeyboardType.Phone
+                        },
+                    ),
+                )
+            }
+            OwnkeyRow(
+                modifier = Modifier.testTag("quick-try-custom-symbols"),
+                title = "Custom long-press symbols",
+                summary = "Tap Q, E or any letter and choose your own accents, signs or emoji.",
+                chevron = true,
+                onClick = { navController.navigate(Routes.Settings.SymbolShortcuts) },
+            )
+        }
+
+        HomeAiCard(onClick = { navController.navigate(Routes.Settings.Voxtral) })
+        OwnkeyGroup {
+            OwnkeyRow(
+                modifier = Modifier.testTag("home-prescreen-workspace"),
+                title = "Pre-screen editing workspace (experimental)",
+                summary = "Draft locally, format text, review AI changes, then approve or reject.",
+                chevron = true,
+                onClick = { navController.navigate(Routes.Settings.PreScreen) },
+            )
+        }
 
         OwnkeyGroup {
             OwnkeyRow(

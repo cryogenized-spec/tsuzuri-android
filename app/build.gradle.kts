@@ -71,7 +71,7 @@ configure<ApplicationExtension> {
     }
 
     defaultConfig {
-        applicationId = "nl.bartvandermeeren.ownkey"
+        applicationId = "io.github.cryogenizedspec.tsuzuri"
         minSdk = projectMinSdk.toInt()
         targetSdk = projectTargetSdk.toInt()
         versionCode = projectVersionCode.toInt()
@@ -90,6 +90,20 @@ configure<ApplicationExtension> {
                 assets.directories += "src/main/assets"
             }
         }
+    }
+
+    lint {
+        // Android Lint/K2 analyzer crashes in inherited Flog.kt:
+        // UElementAsPsiDetector -> KaFirExpressionTypeProvider.
+        // Keep all other Android lint issues enabled and fail on real findings.
+        // TODO: remove once AGP/Lint fixes the upstream analyzer crash.
+        disable += "UElementAsPsi"
+        // Android Lint/K2 currently crashes in inherited LaunchUtils.kt while
+        // resolving a lambda in IntentDetector's IntentReset issue.
+        // Exception is confined to this one detector; remaining lint and
+        // CodeQL Java/Kotlin analysis stay required.
+        disable += "IntentReset"
+        abortOnError = true
     }
 
     // Every standalone APK contains one ABI. Play derives device splits from the AAB.

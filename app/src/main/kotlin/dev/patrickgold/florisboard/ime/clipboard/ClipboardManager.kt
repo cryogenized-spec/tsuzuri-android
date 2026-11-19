@@ -24,6 +24,7 @@ import dev.patrickgold.florisboard.editorInstance
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardHistoryDao
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardHistoryDatabase
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardItem
+import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardMediaProvider
 import dev.patrickgold.florisboard.ime.clipboard.provider.ItemType
 import java.io.Closeable
 import kotlinx.coroutines.CoroutineScope
@@ -37,9 +38,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import org.florisboard.lib.android.AndroidClipboardManager
 import org.florisboard.lib.android.AndroidClipboardManager_OnPrimaryClipChangedListener
 import org.florisboard.lib.android.clearPrimaryClipAnyApi
@@ -95,6 +96,14 @@ class ClipboardManager(
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val cleanUpJob: Job
     private var clipHistoryDb: ClipboardHistoryDatabase? = null
+    private val historyMutationMutex = Mutex()
+    // The same lock guards primary ownership changes and the final media
+    // reference check + file disposal. A cleanup must not delete a URI that
+    // an external clipboard callback has just made active.
+    private val mediaOwnershipLock = Any()
+    // Media removed from history while still on the primary/system clipboard
+    // must be deleted only after those references are released.
+    private val deferredMediaDisposal = mutableMapOf<String, ClipboardItem>()
     private val clipHistoryDao: ClipboardHistoryDao? get() = clipHistoryDb?.clipboardItemDao()
 
     val historyFlow: StateFlow<ClipboardHistory>
@@ -102,8 +111,7 @@ class ClipboardManager(
     val currentHistory: ClipboardHistory
         get() = historyFlow.value
 
-    private val primaryClipLastFromCallbackGuard = Mutex(locked = false)
-    private var primaryClipLastFromCallback: ClipData? = null
+    private val clipboardEventGeneration = ClipboardEventGeneration()
     val primaryClipFlow: StateFlow<ClipboardItem?>
         field = MutableStateFlow(null)
     inline var primaryClip
@@ -160,14 +168,16 @@ class ClipboardManager(
         }
     }
 
+    private fun historyDatabase(): ClipboardHistoryDatabase = synchronized(this) {
+        clipHistoryDb ?: ClipboardHistoryDatabase.new(appContext).also { clipHistoryDb = it }
+    }
+
     fun initializeForContext(context: Context) {
         ioScope.launch {
-            if (clipHistoryDb == null) {
-                clipHistoryDb = ClipboardHistoryDatabase.new(context.applicationContext)
-                withContext(Dispatchers.Main) {
-                    clipHistoryDao?.getAllAsFlow()?.collect { items ->
-                        updateHistory(items)
-                    }
+            val database = historyDatabase()
+            withContext(Dispatchers.Main) {
+                database.clipboardItemDao().getAllAsFlow().collect { items ->
+                    updateHistory(items)
                 }
             }
         }
@@ -184,66 +194,124 @@ class ClipboardManager(
      * Sets the current primary clip without updating the internal clipboard history.
      */
     fun updatePrimaryClip(item: ClipboardItem?) {
-        primaryClip = item
-        if (prefs.clipboard.useInternalClipboard.get()) {
-            val syncBehavior = prefs.clipboard.syncToSystem.get()
-            val clipData = item?.toClipData(appContext)
-            if (clipData != null && syncBehavior.shouldSyncSet) {
-                systemClipboardManager.setPrimaryClip(clipData)
-            } else if (clipData == null && syncBehavior.shouldSyncClear) {
-                systemClipboardManager.clearPrimaryClipAnyApi()
+        synchronized(mediaOwnershipLock) {
+            // Internal updates supersede any pending external clipboard callback.
+            clipboardEventGeneration.invalidatePending()
+            primaryClip = item
+            if (prefs.clipboard.useInternalClipboard.get()) {
+                val syncBehavior = prefs.clipboard.syncToSystem.get()
+                val clipData = item?.toClipData(appContext)
+                if (clipData != null && syncBehavior.shouldSyncSet) {
+                    systemClipboardManager.setPrimaryClip(clipData)
+                } else if (clipData == null && syncBehavior.shouldSyncClear) {
+                    systemClipboardManager.clearPrimaryClipAnyApi()
+                }
+            } else {
+                systemClipboardManager.setOrClearPrimaryClip(item?.toClipData(appContext))
             }
-        } else {
-            systemClipboardManager.setOrClearPrimaryClip(item?.toClipData(appContext))
         }
+        scheduleDeferredMediaCleanup()
+    }
+
+    /**
+     * Apply an external event under the same ownership lock as media disposal.
+     * The epoch check still rejects superseded events atomically.
+     */
+    private fun applyCurrentClipboardEvent(
+        epoch: Long,
+        mediaSource: ClipboardExternalMediaSource? = null,
+        update: () -> Unit,
+    ): Boolean {
+        val applied = synchronized(mediaOwnershipLock) {
+            clipboardEventGeneration.applyIfCurrent(epoch, mediaSource, update)
+        }
+        if (applied) scheduleDeferredMediaCleanup()
+        return applied
     }
 
     /**
      * Called by system clipboard when the system primary clip has changed.
      */
     override fun onPrimaryClipChanged() {
+        val callbackGeneration = clipboardEventGeneration.next()
+        scheduleDeferredMediaCleanup()
         val syncBehavior = prefs.clipboard.syncToFloris.get()
         if (!prefs.clipboard.useInternalClipboard.get() || syncBehavior != ClipboardSyncBehavior.NO_EVENTS) {
             val systemPrimaryClip = systemClipboardManager.primaryClip
             ioScope.launch {
-                val isDuplicate: Boolean
-                primaryClipLastFromCallbackGuard.withLock {
-                    val a = primaryClipLastFromCallback?.getItemAt(0)
-                    val b = systemPrimaryClip?.getItemAt(0)
-                    isDuplicate = when {
-                        a === b -> true
-                        a == null || b == null -> false
-                        else -> a.text == b.text && a.uri == b.uri
-                    }
-                    primaryClipLastFromCallback = systemPrimaryClip
-                }
-                if (isDuplicate) return@launch
-
+                if (!clipboardEventGeneration.isCurrent(callbackGeneration)) return@launch
+                // Do not deduplicate until an event is actually applied. Otherwise
+                // an identical later callback can invalidate unfinished work and be
+                // mistaken for a duplicate, losing the clipboard update.
                 val internalPrimaryClip = primaryClip
 
                 if (systemPrimaryClip == null) {
                     if (syncBehavior.shouldSyncClear) {
-                        primaryClip = null
+                        applyCurrentClipboardEvent(callbackGeneration) { primaryClip = null }
                     }
                     return@launch
                 }
 
                 if (systemPrimaryClip.getItemAt(0).let { it.text == null && it.uri == null }) {
                     if (syncBehavior.shouldSyncClear) {
-                        primaryClip = null
+                        applyCurrentClipboardEvent(callbackGeneration) { primaryClip = null }
                     }
                     return@launch
                 }
 
                 if (!syncBehavior.shouldSyncSet) {
+                    applyCurrentClipboardEvent(callbackGeneration) { /* no import */ }
                     return@launch
                 }
 
-                val isEqual = internalPrimaryClip?.isEqualTo(systemPrimaryClip) == true
+                val incomingSensitive = systemPrimaryClip.description.extras
+                    ?.getBoolean(ClipboardRetentionPolicy.SENSITIVE_EXTRA) ?: false
+                val isEqual = internalPrimaryClip?.isEqualTo(systemPrimaryClip) == true &&
+                    internalPrimaryClip.isSensitive == incomingSensitive
                 if (!isEqual) {
-                    val item = ClipboardItem.fromClipData(appContext, systemPrimaryClip, cloneUri = true)
-                    primaryClip = item
-                    insertOrMoveBeginning(item)
+                    val mediaSource = if (incomingSensitive) null else {
+                        val incomingItem = systemPrimaryClip.getItemAt(0)
+                        val formats = List(systemPrimaryClip.description.mimeTypeCount) {
+                            systemPrimaryClip.description.getMimeType(it)
+                        }
+                        ClipboardCapturePolicy.externalMediaSource(
+                            sourceUri = incomingItem.uri?.toString(),
+                            sourceAuthority = incomingItem.uri?.authority,
+                            timestampMs = systemPrimaryClip.description.timestamp,
+                            mimeTypes = formats,
+                            ownProviderAuthority = ClipboardMediaProvider.AUTHORITY,
+                        )
+                    }
+
+                    // A callback can repeat before the first copy has been committed.
+                    // Never suppress pending work: deduplicate only committed sources.
+                    if (mediaSource != null &&
+                        clipboardEventGeneration.wasAppliedExternalMediaSource(mediaSource)
+                    ) return@launch
+
+                    // IMPORTANT: cloning writes bytes to app-private disk before the
+                    // history filter. Sensitive media must stay as a borrowed URI.
+                    val item = ClipboardItem.fromClipData(
+                        appContext, systemPrimaryClip, cloneUri = !incomingSensitive,
+                    )
+                    val applied = applyCurrentClipboardEvent(callbackGeneration, mediaSource) {
+                        primaryClip = item
+                        insertOrMoveBeginning(item)
+                    }
+                    if (!applied) {
+                        // Borrowed Tsuzuri provider URIs may belong to pinned/history clips.
+                        // Only close media newly copied from a different authority.
+                        if (!incomingSensitive && ClipboardCapturePolicy.ownsNewClone(
+                                isMedia = item.type == ItemType.IMAGE || item.type == ItemType.VIDEO,
+                                originalAuthority = systemPrimaryClip.getItemAt(0).uri?.authority,
+                                ownProviderAuthority = ClipboardMediaProvider.AUTHORITY,
+                            )
+                        ) {
+                            item.close(appContext)
+                        }
+                    }
+                } else {
+                    applyCurrentClipboardEvent(callbackGeneration) { /* accepted current clip */ }
                 }
             }
         }
@@ -269,6 +337,7 @@ class ClipboardManager(
      * Adds a new item to the clipboard history (if enabled).
      */
     private fun insertOrMoveBeginning(newItem: ClipboardItem) {
+        if (!ClipboardRetentionPolicy.shouldPersist(newItem.isSensitive)) return
         if (prefs.clipboard.historyEnabled.get()) {
             val historyElement = currentHistory.all.firstOrNull { item ->
                 item.type == ItemType.TEXT && item.text == newItem.text && item.isSensitive == newItem.isSensitive
@@ -295,7 +364,79 @@ class ClipboardManager(
             if (nToRemove > 0) {
                 val itemsToRemove = nonPinnedItems.asReversed().filterIndexed { n, _ -> n < nToRemove }
                 ioScope.launch {
-                    clipHistoryDao?.delete(itemsToRemove)
+                    historyMutationMutex.withLock {
+                        val db = historyDatabase()
+                        val dao = db.clipboardItemDao()
+                        // Use the current database, not a stale UI history snapshot:
+                        // an item may have been pinned while this job was queued.
+                        val currentUnpinned = dao.getAll()
+                            .filterNot { it.isPinned }
+                            .sortedByDescending { it.creationTimestampMs }
+                        val expired = currentUnpinned.drop(prefs.clipboard.historySizeLimit.get())
+                        if (expired.isNotEmpty()) {
+                            db.runInTransaction { dao.delete(expired) }
+                            disposeUnreferencedHistoryMedia(expired, db)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Release media only when no surviving history row or primary clipboard
+     * item still refers to the same provider URI. Caller must hold
+     * historyMutationMutex to prevent a write between check and deletion.
+     */
+    private fun disposeUnreferencedHistoryMedia(
+        removed: Collection<ClipboardItem>,
+        db: ClipboardHistoryDatabase,
+    ) {
+        synchronized(mediaOwnershipLock) {
+            val survivors = db.clipboardItemDao().getAll().mapNotNull { it.uri?.toString() }.toSet()
+            // Account for callbacks still queued on the system clipboard.
+            val systemUri = tryOrNull { systemClipboardManager.primaryClip?.getItemAt(0)?.uri?.toString() }
+            val active = primaryClip?.uri?.toString()
+            for (item in removed.distinctBy { it.uri?.toString() ?: "row:" + it.id }) {
+                val uri = item.uri?.toString() ?: continue
+                if (item.uri?.authority != ClipboardMediaProvider.AUTHORITY) continue
+                when {
+                    uri in survivors -> deferredMediaDisposal.remove(uri)
+                    !ClipboardMediaRetentionPolicy.mayDispose(uri, survivors, active) || uri == systemUri -> {
+                        deferredMediaDisposal[uri] = item
+                    }
+                    else -> {
+                        item.close(appContext)
+                        deferredMediaDisposal.remove(uri)
+                    }
+                }
+            }
+        }
+    }
+
+    /** Recheck deferred files under the history lock after a primary-clip change. */
+    private fun scheduleDeferredMediaCleanup() {
+        if (synchronized(mediaOwnershipLock) { deferredMediaDisposal.isEmpty() }) return
+        ioScope.launch {
+            historyMutationMutex.withLock {
+                val survivors = historyDatabase().clipboardItemDao().getAll()
+                    .mapNotNull { it.uri?.toString() }.toSet()
+                synchronized(mediaOwnershipLock) {
+                    val active = primaryClip?.uri?.toString()
+                    val systemUri = tryOrNull {
+                        systemClipboardManager.primaryClip?.getItemAt(0)?.uri?.toString()
+                    }
+                    val pending = deferredMediaDisposal.iterator()
+                    while (pending.hasNext()) {
+                        val (uri, item) = pending.next()
+                        if (uri in survivors) {
+                            // A new history row now owns this file.
+                            pending.remove()
+                        } else if (uri != active && uri != systemUri) {
+                            item.close(appContext)
+                            pending.remove()
+                        }
+                    }
                 }
             }
         }
@@ -311,9 +452,20 @@ class ClipboardManager(
             )
         }
         if (itemsToRemove.isEmpty()) return false
-        val dao = clipHistoryDao ?: return false
-        dao.delete(itemsToRemove)
-        return true
+        return historyMutationMutex.withLock {
+            val db = historyDatabase()
+            val dao = db.clipboardItemDao()
+            val now = System.currentTimeMillis()
+            // Re-evaluate expiry after acquiring the write mutex. Do not
+            // destroy items pinned or updated after the original plan.
+            val eligible = dao.getAll().filter { item ->
+                ClipboardCleanupScheduler.isExpired(item.toCleanupItem(), plan.policy, now)
+            }
+            if (eligible.isEmpty()) return@withLock false
+            db.runInTransaction { dao.delete(eligible) }
+            disposeUnreferencedHistoryMedia(eligible, db)
+            true
+        }
     }
 
     private fun ClipboardItem.toCleanupItem() = ClipboardCleanupItem(
@@ -324,24 +476,39 @@ class ClipboardManager(
 
     private fun moveToTheBeginning(oldItem: ClipboardItem, newItem: ClipboardItem) {
         ioScope.launch {
-            clipHistoryDao?.delete(oldItem.id)
-            clipHistoryDao?.insert(newItem)
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                db.runInTransaction {
+                    db.clipboardItemDao().delete(oldItem.id)
+                    db.clipboardItemDao().insert(newItem)
+                }
+            }
         }
     }
 
     fun insertClip(item: ClipboardItem) {
+        if (!ClipboardRetentionPolicy.shouldPersist(item.isSensitive)) return
         ioScope.launch {
-            val id = clipHistoryDao?.insert(item)
-            item.id = id ?: 0
+            historyMutationMutex.withLock {
+                val id = historyDatabase().clipboardItemDao().insert(item)
+                item.id = id
+            }
         }
     }
 
     fun clearExactHistory(items: List<ClipboardItem>) {
         ioScope.launch {
-            for (item in items) {
-                item.close(appContext)
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                val ids = items.map { it.id }.toSet()
+                val removed = db.runInTransaction<List<ClipboardItem>> {
+                    val dao = db.clipboardItemDao()
+                    val existing = dao.getAll().filter { it.id in ids }
+                    if (existing.isNotEmpty()) dao.delete(existing)
+                    existing
+                }
+                disposeUnreferencedHistoryMedia(removed, db)
             }
-            clipHistoryDao?.delete(items)
         }
     }
 
@@ -350,10 +517,16 @@ class ClipboardManager(
      */
     fun clearHistory() {
         ioScope.launch {
-            for (item in currentHistory.all) {
-                item.close(appContext)
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                val removed = db.runInTransaction<List<ClipboardItem>> {
+                    val dao = db.clipboardItemDao()
+                    val old = dao.getAll().filterNot { it.isPinned }
+                    dao.deleteAllUnpinned()
+                    old
+                }
+                disposeUnreferencedHistoryMedia(removed, db)
             }
-            clipHistoryDao?.deleteAllUnpinned()
         }
     }
 
@@ -361,12 +534,7 @@ class ClipboardManager(
      * Clears the full clipboard history
      */
     fun clearFullHistory() {
-        ioScope.launch {
-            for (item in currentHistory.all) {
-                item.close(appContext)
-            }
-            clipHistoryDao?.deleteAll()
-        }
+        ioScope.launch { clearFullHistoryForRestore() }
     }
 
 
@@ -375,42 +543,88 @@ class ClipboardManager(
      *
      * @param items the [ClipboardItem] list with the new items
      */
-    fun restoreHistory(items: List<ClipboardItem>) {
-        ioScope.launch {
-            val currentHistory = currentHistory.all
-            for (item in items) {
-                if (!currentHistory.map { it.copy(id = 0) }.contains(item.copy(id = 0))) {
-                    insertClip(item.copy(id = 0))
+    /**
+     * Restore uses awaiting, transaction-backed writes. The UI must never
+     * report success before its history rows have actually been committed.
+     */
+    suspend fun restoreHistoryForRestore(items: List<ClipboardItem>) {
+        withContext(Dispatchers.IO) {
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                db.runInTransaction {
+                    val dao = db.clipboardItemDao()
+                    val existing = dao.getAll().map { it.copy(id = 0) }.toMutableSet()
+                    for (item in items) {
+                        if (!ClipboardRetentionPolicy.shouldPersist(item.isSensitive)) continue
+                        val candidate = item.copy(id = 0)
+                        if (existing.add(candidate)) dao.insert(candidate)
+                    }
                 }
+            }
+        }
+    }
+
+    /**
+     * Clear all history before restoring an archive. Unlike clearFullHistory(),
+     * this function waits for the database transaction and file cleanup.
+     */
+    suspend fun clearFullHistoryForRestore() {
+        withContext(Dispatchers.IO) {
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                val oldItems = db.runInTransaction<List<ClipboardItem>> {
+                    val dao = db.clipboardItemDao()
+                    val old = dao.getAll()
+                    dao.deleteAll()
+                    old
+                }
+                disposeUnreferencedHistoryMedia(oldItems, db)
+            }
+        }
+    }
+
+    fun restoreHistory(items: List<ClipboardItem>) {
+        ioScope.launch { restoreHistoryForRestore(items) }
+    }
+
+    suspend fun deleteClipAwait(item: ClipboardItem, onlyIfUnpinned: Boolean): Boolean {
+        return withContext(Dispatchers.IO) {
+            historyMutationMutex.withLock {
+                val db = historyDatabase()
+                val deleted = db.runInTransaction<ClipboardItem?> {
+                    val dao = db.clipboardItemDao()
+                    val existing = dao.getAll().firstOrNull { it.id == item.id }
+                    if (existing == null || (onlyIfUnpinned && existing.isPinned)) {
+                        null
+                    } else {
+                        dao.delete(existing.id)
+                        existing
+                    }
+                }
+                // Only delete media if a database row was actually removed.
+                deleted?.let { disposeUnreferencedHistoryMedia(listOf(it), db) }
+                deleted != null
             }
         }
     }
 
     fun deleteClip(item: ClipboardItem, onlyIfUnpinned: Boolean) {
-        ioScope.launch {
-            if (onlyIfUnpinned) {
-                clipHistoryDao?.deleteIfUnpinned(item.id)
-            } else {
-                clipHistoryDao?.delete(item.id)
-            }
-            tryOrNull {
-                val uri = item.uri
-                if (uri != null) {
-                    appContext.contentResolver.delete(uri, null, null)
-                }
-            }
-        }
+        ioScope.launch { deleteClipAwait(item, onlyIfUnpinned) }
     }
 
     fun pinClip(item: ClipboardItem) {
         ioScope.launch {
-            clipHistoryDao?.update(item.copy(isPinned = true))
+            historyMutationMutex.withLock {
+                historyDatabase().clipboardItemDao().update(item.copy(isPinned = true))
+            }
         }
     }
 
     fun unpinClip(item: ClipboardItem) {
         ioScope.launch {
-            clipHistoryDao?.update(item.copy(isPinned = false))
+            historyMutationMutex.withLock {
+                historyDatabase().clipboardItemDao().update(item.copy(isPinned = false))
+            }
         }
     }
 

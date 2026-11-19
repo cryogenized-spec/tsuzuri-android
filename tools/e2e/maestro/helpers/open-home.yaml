@@ -1,8 +1,8 @@
 # Brings the settings app to Home. Setup must be done (run.sh takes care of that).
-# Never uses `stopApp: true`: force-stopping the package also stops Ownkey's keyboard service, and
-# Android then switches the phone to another keyboard. run.sh force-stops and re-selects Ownkey
+# Never uses `stopApp: true`: force-stopping the package also stops Tsuzuri's keyboard service, and
+# Android then switches the phone to another keyboard. run.sh force-stops and re-selects Tsuzuri
 # before every flow instead, so the app normally starts fresh on Home here.
-appId: nl.bartvandermeeren.ownkey.debug
+appId: io.github.cryogenizedspec.tsuzuri.debug
 ---
 - launchApp:
     stopApp: false
@@ -15,7 +15,7 @@ appId: nl.bartvandermeeren.ownkey.debug
       - back
       - runFlow:
           when:
-            notVisible: "Ownkey"
+            notVisible: "Tsuzuri"
           commands:
             - launchApp:
                 stopApp: false

@@ -34,6 +34,7 @@ import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.app.LocalNavController
 import dev.patrickgold.florisboard.cacheManager
 import dev.patrickgold.florisboard.clipboardManager
+import dev.patrickgold.florisboard.ime.clipboard.ClipboardRetentionPolicy
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardFileStorage
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardItem
 import dev.patrickgold.florisboard.ime.clipboard.provider.ItemType
@@ -54,6 +55,7 @@ import java.util.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.florisboard.lib.android.readToFile
 import org.florisboard.lib.android.showLongToast
 import org.florisboard.lib.android.showLongToastSync
@@ -117,13 +119,13 @@ fun RestoreScreen() = FlorisScreen {
                     workspace.metadata.versionCode != BuildConfig.VERSION_CODE -> {
                         R.string.backup_and_restore__restore__metadata_warn_different_version
                     }
-                    !workspace.metadata.packageName.startsWith(Restore.PACKAGE_NAME) -> {
+                    !RestoreCompatibilityPolicy.isTsuzuriPackage(workspace.metadata.packageName) -> {
                         R.string.backup_and_restore__restore__metadata_warn_different_vendor
                     }
                     else -> null
                 }
                 workspace.restoreErrorId = when {
-                    workspace.metadata.packageName.isBlank() || workspace.metadata.versionCode < Restore.MIN_VERSION_CODE -> {
+                    !RestoreCompatibilityPolicy.accepts(workspace.metadata.packageName, workspace.metadata.versionCode) -> {
                         R.string.backup_and_restore__restore__metadata_error_invalid_metadata
                     }
                     else -> null
@@ -159,6 +161,43 @@ fun RestoreScreen() = FlorisScreen {
                 document
             } else null
         } else null
+        // Parse and validate the selected clipboard archive BEFORE modifying any
+        // preferences, dictionaries or existing clipboard files.
+        val archiveClipboardDir = workspace.outputDir.subDir("clipboard")
+        fun readArchiveItems(name: String): List<ClipboardItem> {
+            val file = archiveClipboardDir.subFile(name)
+            return if (file.exists()) file.readJson<List<ClipboardItem>>() else emptyList()
+        }
+        val textArchive = if (restoreFilesSelector.clipboardTextItems) {
+            withContext(Dispatchers.IO) { readArchiveItems(Backup.CLIPBOARD_TEXT_ITEMS_JSON_NAME) }
+        } else emptyList()
+        val imageArchive = if (restoreFilesSelector.clipboardImageItems) {
+            withContext(Dispatchers.IO) { readArchiveItems(Backup.CLIPBOARD_IMAGES_JSON_NAME) }
+        } else emptyList()
+        val videoArchive = if (restoreFilesSelector.clipboardVideoItems) {
+            withContext(Dispatchers.IO) { readArchiveItems(Backup.CLIPBOARD_VIDEO_JSON_NAME) }
+        } else emptyList()
+        withContext(Dispatchers.IO) {
+            val imageBytes = ClipboardBackupMediaImporter.validate(
+                archiveClipboardDir, workspace.metadata.packageName,
+                workspace.metadata.versionCode, imageArchive, ItemType.IMAGE,
+            )
+            val videoBytes = ClipboardBackupMediaImporter.validate(
+                archiveClipboardDir, workspace.metadata.packageName,
+                workspace.metadata.versionCode, videoArchive, ItemType.VIDEO,
+            )
+            require(imageBytes <= 256L * 1024L * 1024L - videoBytes) {
+                "Backup clipboard media exceeds aggregate size budget"
+            }
+            val imageRows = imageArchive.count {
+                it.type == ItemType.IMAGE && ClipboardRetentionPolicy.shouldPersist(it.isSensitive)
+            }
+            val videoRows = videoArchive.count {
+                it.type == ItemType.VIDEO && ClipboardRetentionPolicy.shouldPersist(it.isSensitive)
+            }
+            require(imageRows + videoRows <= 999) { "Too many backup clipboard media rows" }
+        }
+
         // Fail speech persistence before changing the other selected restore targets.
         if (speechDocument != null && !context.speechDictionary().value.restore(speechDocument, merge = !shouldReset)) {
             throw IllegalStateException(context.stringRes(R.string.speech_dictionary__save_error))
@@ -195,57 +234,40 @@ fun RestoreScreen() = FlorisScreen {
         }
         val clipboardManager = context.clipboardManager().value
         if (shouldReset) {
-            clipboardManager.clearFullHistory()
-            ClipboardFileStorage.resetClipboardFileStorage(context)
+            // Await deletion before copying imported media to the same directory.
+            clipboardManager.clearFullHistoryForRestore()
+            withContext(Dispatchers.IO) {
+                ClipboardFileStorage.resetClipboardFileStorage(context)
+            }
         }
 
         if (restoreFilesSelector.provideClipboardItems()) {
-            val clipboardFilesDir = workspace.outputDir.subDir("clipboard")
-
-            if (restoreFilesSelector.clipboardTextItems) {
-                val clipboardItems = clipboardFilesDir.subFile(Backup.CLIPBOARD_TEXT_ITEMS_JSON_NAME)
-                if (clipboardItems.exists()) {
-                    val clipboardItemsList = clipboardItems.readJson<List<ClipboardItem>>()
-                    clipboardManager.restoreHistory(items = clipboardItemsList.filter { it.type == ItemType.TEXT })
+            val importedMedia = mutableListOf<ClipboardItem>()
+            try {
+                if (restoreFilesSelector.clipboardImageItems) {
+                    importedMedia += ClipboardBackupMediaImporter.prepare(
+                        context, archiveClipboardDir, workspace.metadata.packageName,
+                        workspace.metadata.versionCode, imageArchive, ItemType.IMAGE,
+                    )
                 }
-            }
-            if (restoreFilesSelector.clipboardImageItems) {
-                val clipboardItems = clipboardFilesDir.subFile(Backup.CLIPBOARD_IMAGES_JSON_NAME)
-                if (clipboardItems.exists()) {
-                    val clipboardItemsList = clipboardItems.readJson<List<ClipboardItem>>()
-                    for (item in clipboardItemsList.filter { it.type == ItemType.IMAGE }) {
-                        ClipboardFileStorage.insertFileFromBackupIfNotExisting(
-                            context,
-                            clipboardFilesDir.subFile(
-                                relPath = "${ClipboardFileStorage.CLIPBOARD_FILES_PATH}/${
-                                    item.uri!!.path!!.split(
-                                        '/'
-                                    ).last()
-                                }"
-                            )
-                        )
-                    }
-                    clipboardManager.restoreHistory(items = clipboardItemsList.filter { it.type == ItemType.IMAGE })
+                if (restoreFilesSelector.clipboardVideoItems) {
+                    importedMedia += ClipboardBackupMediaImporter.prepare(
+                        context, archiveClipboardDir, workspace.metadata.packageName,
+                        workspace.metadata.versionCode, videoArchive, ItemType.VIDEO,
+                    )
                 }
-            }
-            if (restoreFilesSelector.clipboardVideoItems) {
-                val clipboardItems = clipboardFilesDir.subFile(Backup.CLIPBOARD_VIDEO_JSON_NAME)
-                if (clipboardItems.exists()) {
-                    val clipboardItemsList = clipboardItems.readJson<List<ClipboardItem>>()
-                    for (item in clipboardItemsList.filter { it.type == ItemType.VIDEO }) {
-                        ClipboardFileStorage.insertFileFromBackupIfNotExisting(
-                            context,
-                            clipboardFilesDir.subFile(
-                                relPath = "${ClipboardFileStorage.CLIPBOARD_FILES_PATH}/${
-                                    item.uri!!.path!!.split(
-                                        '/'
-                                    ).last()
-                                }"
-                            )
-                        )
-                    }
-                    clipboardManager.restoreHistory(items = clipboardItemsList.filter { it.type == ItemType.VIDEO })
-                }
+                // A single Room transaction makes history insertion awaitable,
+                // and source URI identities have been rebound to our provider.
+                clipboardManager.restoreHistoryForRestore(
+                    textArchive.filter {
+                        it.type == ItemType.TEXT &&
+                            ClipboardRetentionPolicy.shouldPersist(it.isSensitive)
+                    } + importedMedia,
+                )
+            } catch (error: Throwable) {
+                // Avoid orphaning media files if another archive section fails.
+                importedMedia.forEach { it.close(context) }
+                throw error
             }
         }
     }

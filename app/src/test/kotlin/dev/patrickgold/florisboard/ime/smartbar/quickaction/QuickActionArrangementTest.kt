@@ -165,4 +165,17 @@ class QuickActionArrangementTest : FunSpec({
             beforeDistinct.distinct() shouldBe afterDistinct
         }
     }
+
+    test("Tsuzuri clipboard alpha keeps clipboard one tap away and paste visible") {
+        val arrangement = QuickActionArrangement.Default
+        arrangement.stickyAction shouldBe QuickAction.InsertKey(TextKeyData.IME_UI_MODE_CLIPBOARD)
+        arrangement.dynamicActions.take(4) shouldBe listOf(
+            QuickAction.InsertKey(TextKeyData.UNDO),
+            QuickAction.InsertKey(TextKeyData.CLIPBOARD_COPY),
+            QuickAction.InsertKey(TextKeyData.CLIPBOARD_PASTE),
+            QuickAction.InsertKey(TextKeyData.CLIPBOARD_SELECT_ALL),
+        )
+        arrangement.dynamicActions.contains(QuickAction.InsertKey(TextKeyData.VOICE_INPUT)) shouldBe true
+        arrangement.distinct() shouldBe arrangement
+    }
 })

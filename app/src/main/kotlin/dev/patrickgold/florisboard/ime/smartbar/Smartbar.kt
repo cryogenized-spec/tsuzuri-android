@@ -210,7 +210,7 @@ private fun SmartbarMainRow(
     // Seeded from the current state, so a recreated composition never flashes the wrong strip.
     val dictationFixPhase by remember(dictationFixController) {
         dictationFixController.state.map(::phaseOf).distinctUntilChanged()
-    }.collectAsState(initial = phaseOf(dictationFixController.state.value))
+    }.collectAsState(initial = remember(dictationFixController) { phaseOf(dictationFixController.state.value) })
     val dictationFixOffered = dictationFixPhase == 1
     val dictationFixChoosing = dictationFixPhase == 2
     val voiceRewriteUiController by context.voiceRewriteUiController()
