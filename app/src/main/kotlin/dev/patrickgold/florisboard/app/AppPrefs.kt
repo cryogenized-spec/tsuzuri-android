@@ -829,6 +829,11 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
     inner class Voxtral {
         // Empty preserves the pre-Orukeet key-based route on upgrade.
         val dictationBackend = string(key = "ai__dictation_backend", default = "")
+        /**
+         * Manual microphone start is the safe default. Automatic start on keyboard focus
+         * requires the user to deliberately enable it in Voice & AI settings.
+         */
+        val autoVoiceCapture = boolean(key = "ai__auto_voice_capture", default = false)
         val previousDictationBackend = string(key = "ai__previous_dictation_backend", default = "")
         /** How personal-dictionary words travel with cloud audio; see CloudVocabularyMode. */
         val cloudVocabularyMode = string(key = "ai__cloud_vocabulary_mode", default = "auto")
