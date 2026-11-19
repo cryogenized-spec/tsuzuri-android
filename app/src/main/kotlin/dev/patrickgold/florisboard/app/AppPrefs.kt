@@ -579,13 +579,15 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
             key = "keyboard__hinted_number_row_mode",
             default = KeyHintMode.ACCENT_PRIORITY,
         )
+        // Show small long-press symbol legends on the keys by default, as expected in
+        // a full-featured phone keyboard. Existing explicit user choices remain stored.
         val hintedSymbolsEnabled = boolean(
             key = "keyboard__hinted_symbols_enabled",
-            default = false,
+            default = true,
         )
         val hintedSymbolsMode = enum(
             key = "keyboard__hinted_symbols_mode",
-            default = KeyHintMode.ACCENT_PRIORITY,
+            default = KeyHintMode.HINT_PRIORITY,
         )
         val utilityKeyEnabled = boolean(
             key = "keyboard__utility_key_enabled",
