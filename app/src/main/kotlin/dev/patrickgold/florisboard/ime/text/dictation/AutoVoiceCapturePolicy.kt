@@ -10,6 +10,17 @@ package dev.patrickgold.florisboard.ime.text.dictation
  * Neither unsupported system voice input nor the mock backend may start without a key press.
  */
 internal object AutoVoiceCapturePolicy {
+    /**
+     * The legacy empty preference selects cloud dictation when an encrypted cloud key
+     * already exists. Do not read Keystore on the keyboard thread: the coordinator
+     * verifies that key asynchronously before any microphone capture.
+     */
+    fun backendForAuto(preference: String): TranscriptionBackend = when (preference) {
+        TranscriptionBackend.CLOUD.preference, "" -> TranscriptionBackend.CLOUD
+        TranscriptionBackend.ORUKEET.preference -> TranscriptionBackend.ORUKEET
+        else -> TranscriptionBackend.UNAVAILABLE
+    }
+
     fun shouldStart(
         explicitlyEnabled: Boolean,
         backend: TranscriptionBackend,
