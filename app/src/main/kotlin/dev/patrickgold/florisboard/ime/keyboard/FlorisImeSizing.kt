@@ -43,12 +43,15 @@ private val LocalKeyboardRowBaseHeight = compositionLocalOf { 65.dp }
 private val LocalSmartbarHeight = compositionLocalOf { 40.dp }
 
 /**
- * The extended quick-actions strip is a toolbar, not another full letter-key row.
- * Cap it at Android's 48dp comfortable touch-row size, while allowing users who
- * deliberately shrink the entire keyboard to keep their smaller row height.
+ * Signal and glass themes apply a 3dp vertical margin on each side of the
+ * extended-action SnyggRow. Budget for both margins so the CONTENT (and toolbar
+ * hit targets) remains at least 48dp in the standard configuration.
+ * The expanded strip is still shorter than a normal 65dp letter row.
  */
+private val SecondaryToolbarThemeVerticalMargin = 3.dp
+internal val SecondaryToolbarContentTouchHeight = 48.dp
 internal fun compactSecondaryActionRowHeight(keyboardRowHeight: Dp): Dp =
-    minOf(keyboardRowHeight, 48.dp)
+    minOf(keyboardRowHeight, SecondaryToolbarContentTouchHeight + SecondaryToolbarThemeVerticalMargin * 2)
 
 object FlorisImeSizing {
     val keyboardRowBaseHeight: Dp
