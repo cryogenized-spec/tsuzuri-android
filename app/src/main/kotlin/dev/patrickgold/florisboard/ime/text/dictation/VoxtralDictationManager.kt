@@ -213,7 +213,8 @@ class VoxtralDictationManager(
             if (requestedGeneration != sessionGeneration ||
                 requestedEditorSessionId != editorInstance.activeInputSessionId
             ) return@launch
-            if (AutoVoiceCapturePolicy.shouldStart(
+            if (prefs.voxtral.dictationBackend.get() == backend.preference &&
+                AutoVoiceCapturePolicy.shouldStart(
                     explicitlyEnabled = prefs.voxtral.autoVoiceCapture.get(),
                     backend = backend,
                     eligibleEditor = eligibleEditor && aiAvailabilityPolicy.current() is AiAvailability.Available,
@@ -377,6 +378,9 @@ class VoxtralDictationManager(
         if (_stateFlow.value != DictationState.LISTENING && _stateFlow.value != DictationState.PAUSED) {
             return
         }
+        // Every Stop entry point (mic, recording row, and voice-only bar) is deliberate.
+        // Do not auto-restart after transcription or a local live-dictation safety stop.
+        autoCaptureSuppressedUntilKeyboardHide = true
         val lease = activeLease ?: return
         if (aiAvailabilityPolicy.current() !is AiAvailability.Available) {
             cancelDictation()
