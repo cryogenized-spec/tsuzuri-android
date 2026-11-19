@@ -67,6 +67,7 @@ import dev.patrickgold.florisboard.app.settings.dictionary.UserDictionaryType
 import dev.patrickgold.florisboard.app.settings.gestures.GesturesScreen
 import dev.patrickgold.florisboard.app.settings.keyboard.InputFeedbackScreen
 import dev.patrickgold.florisboard.app.settings.keyboard.KeyboardScreen
+import dev.patrickgold.florisboard.app.settings.keyboard.ToolbarActionsScreen
 import dev.patrickgold.florisboard.app.settings.localization.LanguagePackManagerScreen
 import dev.patrickgold.florisboard.app.settings.localization.LanguagePackManagerScreenAction
 import dev.patrickgold.florisboard.app.settings.localization.LocalizationScreen
@@ -150,6 +151,10 @@ object Routes {
         @Serializable
         @Deeplink("settings/keyboard")
         object Keyboard
+
+        @Serializable
+        @Deeplink("settings/keyboard/toolbar-actions")
+        object ToolbarActions
 
         @Serializable
         @Deeplink("settings/keyboard/input-feedback")
@@ -333,6 +338,7 @@ object Routes {
             }
 
             composableWithDeepLink(Settings.Keyboard::class) { KeyboardScreen() }
+            composableWithDeepLink(Settings.ToolbarActions::class) { ToolbarActionsScreen() }
             composableWithDeepLink(Settings.InputFeedback::class) { InputFeedbackScreen() }
             composableWithDeepLink(Settings.SymbolShortcuts::class) { SymbolShortcutScreen() }
             composableWithDeepLink(Settings.PreScreen::class) { entry ->
