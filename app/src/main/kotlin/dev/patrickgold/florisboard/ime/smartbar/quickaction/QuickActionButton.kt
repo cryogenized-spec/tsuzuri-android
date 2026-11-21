@@ -462,6 +462,13 @@ fun QuickActionButton(
                         isAiUnavailable = aiUnavailableReason != null,
                         holdProgress = { holdProgress.value },
                         idleStyle = micIdleStyle,
+                        // A 40dp main row cannot hold a 44dp pill; the 48dp expanded
+                        // row has room for the more prominent 36dp microphone.
+                        diameter = if (aspectRatio == SecondaryQuickActionButtonAspectRatio) {
+                            36.dp
+                        } else {
+                            (FlorisImeSizing.smartbarHeight - 8.dp).coerceAtLeast(28.dp)
+                        },
                     )
                 } else when (action) {
                     is QuickAction.InsertKey -> {
@@ -605,13 +612,14 @@ private fun DictationMicPill(
     isAiUnavailable: Boolean = false,
     holdProgress: () -> Float = { 0f },
     idleStyle: MicIdleStyle = MicIdleStyle.SOLID,
+    diameter: Dp,
 ) {
     val context = LocalContext.current
     val voxtralDictationManager by context.voxtralDictationManager()
     val feedbackState by voxtralDictationManager.feedbackStateFlow.collectAsState()
-    // The extended toolbar has a larger slot than the suggestion row. Keep the mic
-    // face large enough to remain an obvious control rather than an accent-coloured dot.
-    val pillSize = (FlorisImeSizing.smartbarHeight - 4.dp).coerceAtLeast(36.dp)
+    // Match the actual row's available height. The main suggestion row is
+    // 40dp, while the expanded row has enough vertical room for a 36dp face.
+    val pillSize = diameter
     val showSuccess = feedbackState.phase == VoiceActionFeedbackPhase.SUCCESS
     val holdRingColor = rememberKeyboardAccent().color
 
