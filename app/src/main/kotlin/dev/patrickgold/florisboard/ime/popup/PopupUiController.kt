@@ -140,7 +140,6 @@ class PopupUiController(
         if (!isSuitableForExtendedPopup(key)) return
 
         val baseBounds = baseRenderInfo?.bounds ?: boundsProvider(key)
-        val keyPopupDiffX = (key.visibleBounds.width - baseBounds.width) / 2.0f
 
         // Anchor left if keyView is in left half of keyboardView, else anchor right
         val anchorLeft = key.visibleBounds.left < size.width / 2
@@ -170,6 +169,10 @@ class PopupUiController(
             }
         }
 
+        // The panel may have more symbols than fit at preview-key width on a phone.
+        // Shrink candidate cells just enough to keep the whole panel on-screen.
+        val elementWidth = minOf(baseBounds.width, size.width / row0count).coerceAtLeast(1.0f)
+
         // Calculate anchor offset (always positive int, direction depends on anchorLeft and
         // anchorRight state)
         val anchorOffset = when {
@@ -181,13 +184,13 @@ class PopupUiController(
                     else -> 0
                 }
                 val availableSpace = when {
-                    anchorLeft -> key.visibleBounds.left + keyPopupDiffX
+                    anchorLeft -> key.visibleBounds.left + (key.visibleBounds.width - elementWidth) / 2.0f
                     anchorRight -> size.width -
-                        (key.visibleBounds.left + keyPopupDiffX + baseBounds.width)
+                        (key.visibleBounds.left + (key.visibleBounds.width + elementWidth) / 2.0f)
                     else -> 0.0f
                 }
                 while (offset > 0) {
-                    if (availableSpace >= offset * baseBounds.width) {
+                    if (availableSpace >= offset * elementWidth) {
                         break
                     } else {
                         offset -= 1
@@ -275,16 +278,17 @@ class PopupUiController(
         }
 
         // Calculate layout params
-        val extWidth = row0count * baseBounds.width
+        val extWidth = row0count * elementWidth
         val extHeight = when {
             row1count > 0 -> baseBounds.height * 0.4f * 2.0f
             else -> baseBounds.height * 0.4f
         }
-        val x = ((key.visibleBounds.width - baseBounds.width) / 2.0f) + when {
-            anchorLeft -> -anchorOffset * baseBounds.width
-            anchorRight -> -extWidth + baseBounds.width + anchorOffset * baseBounds.width
-            else -> 0.0f
-        } + key.visibleBounds.left
+        // Keep the preferred candidate over the pressed finger when space permits,
+        // but clamp the *actual rendered* panel to the keyboard viewport at Q/P edges.
+        val initialColumn = if (anchorLeft) anchorOffset else row0count - 1 - anchorOffset
+        val x = (key.visibleBounds.left + key.visibleBounds.width / 2.0f -
+            (initialColumn + 0.5f) * elementWidth)
+            .coerceIn(0.0f, (size.width - extWidth).coerceAtLeast(0.0f))
         val y = -baseBounds.height - when {
             row1count > 0 -> (baseBounds.height * 0.4f).toInt()
             else -> 0
@@ -317,71 +321,23 @@ class PopupUiController(
      * @return True if the pointer movement is within the elements bounds, false otherwise.
      */
     fun propagateMotionEvent(key: Key, xEvent: Float, yEvent: Float): Boolean {
-        if (!isShowingExtendedPopup) {
-            return false
-        }
-
-        val extRenderInfo = extRenderInfo ?: return false
-        val baseBounds = extRenderInfo.baseBounds
-        val keyPopupDiffX = (key.visibleBounds.width - baseBounds.width) / 2.0f
-
-        val x = xEvent - key.visibleBounds.left
-        val y = yEvent - key.visibleBounds.top
-        val kX = x / baseBounds.width
-
-        // Check if out of boundary on y-axis
-        if (y < -baseBounds.height || y > 0.9f * baseBounds.height) {
-            return false
-        }
-
-        extRenderInfo.apply {
-            activeElementIndex = when {
-                anchorLeft -> when {
-                    // check if out of boundary on x-axis
-                    x < keyPopupDiffX - (anchorOffset + 1) * baseBounds.width ||
-                        x > (keyPopupDiffX + (row0count + 1 - anchorOffset) * baseBounds.width) -> {
-                        return false
-                    }
-                    // row 1
-                    y < 0 && row1count > 0 -> when {
-                        kX >= row1count - anchorOffset -> row1count - 1
-                        kX < -anchorOffset -> 0
-                        kX < 0 -> kX.toInt() - 1 + anchorOffset
-                        else -> kX.toInt() + anchorOffset
-                    }
-                    // row 0
-                    else -> when {
-                        kX >= row0count - anchorOffset -> row1count + row0count - 1
-                        kX < -anchorOffset -> row1count
-                        kX < 0 -> row1count + kX.toInt() - 1 + anchorOffset
-                        else -> row1count + kX.toInt() + anchorOffset
-                    }
-                }
-                anchorRight -> when {
-                    // check if out of boundary on x-axis
-                    x > key.visibleBounds.width - keyPopupDiffX + (anchorOffset + 1) * baseBounds.width ||
-                        x < (key.visibleBounds.width - keyPopupDiffX - (row0count + 1 - anchorOffset) * baseBounds.width) -> {
-                        return false
-                    }
-                    // row 1
-                    y < 0 && row1count > 0 -> when {
-                        kX >= anchorOffset -> row1count - 1
-                        kX < -(row1count - 1 - anchorOffset) -> 0
-                        kX < 0 -> row1count - 2 + kX.toInt() - anchorOffset
-                        else -> row1count - 1 + kX.toInt() - anchorOffset
-                    }
-                    // row 0
-                    else -> when {
-                        kX >= anchorOffset -> row1count + row0count - 1
-                        kX < -(row0count - 1 - anchorOffset) -> row1count
-                        kX < 0 -> row1count + row0count - 2 + kX.toInt() - anchorOffset
-                        else -> row1count + row0count - 1 + kX.toInt() - anchorOffset
-                    }
-                }
-                else -> -1
-            }
-        }
-
+        val rendered = extRenderInfo ?: return false
+        // Hit testing uses the exact same bounds and cell width used by PopupExtBox.
+        // The older un-clamped anchor arithmetic could highlight a different symbol
+        // from the one under the finger, especially at the screen edges.
+        val hitIndex = popupHitIndex(
+            pointerX = xEvent + key.visibleBounds.left,
+            pointerY = yEvent + key.visibleBounds.top,
+            boundsLeft = rendered.bounds.left,
+            boundsTop = rendered.bounds.top,
+            cellWidth = rendered.bounds.width / rendered.row0count,
+            cellHeight = rendered.baseBounds.height * 0.4f,
+            row0count = rendered.row0count,
+            row1count = rendered.row1count,
+            rightAligned = rendered.anchorRight,
+            keyBottom = key.visibleBounds.bottom,
+        ) ?: return false
+        activeElementIndex = hitIndex
         return true
     }
 
@@ -464,7 +420,7 @@ class PopupUiController(
         }
         extRenderInfo?.let { renderInfo ->
             val baseBounds = renderInfo.baseBounds
-            val elemWidth = baseBounds.width
+            val elemWidth = renderInfo.bounds.width / renderInfo.row0count
             val elemHeight = baseBounds.height * 0.4f
             PopupExtBox(
                 modifier = Modifier
