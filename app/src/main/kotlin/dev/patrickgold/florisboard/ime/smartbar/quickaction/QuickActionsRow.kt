@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -32,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.ime.smartbar.SmartbarLayout
 import dev.patrickgold.florisboard.ime.text.keyboard.TextKeyData
@@ -49,6 +51,10 @@ internal val ToggleOverflowPanelAction = QuickAction.InsertKey(TextKeyData.TOGGL
  * icons into the pill, which reads as cluttered.
  */
 private const val MaxSecondaryRowActionCount = 6
+
+// An explicit inner gutter keeps the first and last icon out of a themed pill's rounded ends.
+// The width calculation below runs *after* this inset, so the overflow target is never clipped.
+private val SecondaryRowHorizontalInset = 6.dp
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
@@ -87,7 +93,15 @@ fun QuickActionsRow(
         modifier = modifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize().then(
+                if (elementName == FlorisImeUi.SmartbarExtendedActionsRow.elementName) {
+                    Modifier.padding(horizontal = SecondaryRowHorizontalInset)
+                } else {
+                    Modifier
+                }
+            ),
+        ) {
             val contentWidth = constraints.maxWidth.toDp()
             val contentHeight = constraints.maxHeight.toDp()
             val isExtendedActionsRow = elementName == FlorisImeUi.SmartbarExtendedActionsRow.elementName
