@@ -57,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -354,19 +355,24 @@ fun TextKeyboardLayout(
                 val keyPopupHeight: Float
                 when {
                     configuration.isOrientationLandscape() -> {
-                        keyPopupWidth = desiredKeyHack.value.visibleBounds.width * 1.0f
-                        keyPopupHeight = desiredKeyHack.value.visibleBounds.height * 3.0f
+                        keyPopupWidth = desiredKeyHack.value.visibleBounds.width * 1.2f
+                        keyPopupHeight = desiredKeyHack.value.visibleBounds.height * 1.9f
                     }
                     else -> {
-                        keyPopupWidth = desiredKeyHack.value.visibleBounds.width * 1.1f
-                        keyPopupHeight = desiredKeyHack.value.visibleBounds.height * 2.5f
+                        keyPopupWidth = desiredKeyHack.value.visibleBounds.width * 1.25f
+                        keyPopupHeight = desiredKeyHack.value.visibleBounds.height * 1.85f
                     }
                 }
-                val keyPopupDiffX = (key.visibleBounds.width - keyPopupWidth) / 2.0f
+                // Keep previews completely inside the keyboard width, including Q/P and split layouts.
+                // Do not clamp vertically: a top-row popup must still rise into the toolbar,
+                // instead of obscuring the pressed letter and its neighbouring keys.
+                val popupWidth = keyPopupWidth.coerceAtMost(keyboardWidth)
+                val popupLeft = (key.visibleBounds.left + (key.visibleBounds.width - popupWidth) / 2.0f)
+                    .coerceIn(0.0f, (keyboardWidth - popupWidth).coerceAtLeast(0.0f))
                 FlorisRect.new().apply {
-                    left = key.visibleBounds.left + keyPopupDiffX
+                    left = popupLeft
                     top = key.visibleBounds.bottom - keyPopupHeight
-                    right = left + keyPopupWidth
+                    right = popupLeft + popupWidth
                     bottom = top + keyPopupHeight
                 }
             },
@@ -495,9 +501,16 @@ private fun TextKeyButton(
                 elementName = FlorisImeUi.KeyHint.elementName,
                 attributes = attributes,
                 selector = selector,
-                modifier = Modifier
-                    .wrapContentSize()
-                    .align(if (isTelPadKey) BiasAlignment(0.5f, 0f) else Alignment.TopEnd),
+                modifier = if (isTelPadKey) {
+                    Modifier.wrapContentSize().align(BiasAlignment(0.5f, 0f))
+                } else {
+                    // Small FUTO-style corner legend: readable, inset from the rounded key edge,
+                    // and still subordinate to the primary letter. Does not alter popup mapping.
+                    Modifier.wrapContentSize()
+                        .align(Alignment.TopEnd)
+                        .padding(top = 4.dp, end = 5.dp)
+                        .scale(1.1f)
+                },
                 text = hintedLabel,
             )
         }
