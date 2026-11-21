@@ -200,11 +200,17 @@ class PopupUiController(
             }
         }
 
-        val initUiIndex = when {
-            anchorLeft -> anchorOffset + row1count
-            anchorRight -> row0count - 1 - anchorOffset + row1count
-            else -> 0
-        }
+        // Centre the chosen bottom-row option over the pressed key when possible.
+        // If edge clamping shifts the strip, recompute the initial selected column
+        // from its *rendered* position rather than choosing an adjacent symbol.
+        val extWidth = row0count * elementWidth
+        val preferredColumn = if (anchorLeft) anchorOffset else row0count - 1 - anchorOffset
+        val x = (key.visibleBounds.left + key.visibleBounds.width / 2.0f -
+            (preferredColumn + 0.5f) * elementWidth)
+            .coerceIn(0.0f, (size.width - extWidth).coerceAtLeast(0.0f))
+        val actualColumn = ((key.visibleBounds.left + key.visibleBounds.width / 2.0f - x) /
+            elementWidth).toInt().coerceIn(0, row0count - 1)
+        val initUiIndex = row1count + actualColumn
         val popupIndices: IntArray
         val uiIndices = IntRange(0, (n - 1).coerceAtLeast(0))
         if (key is TextKey) {
@@ -278,21 +284,16 @@ class PopupUiController(
         }
 
         // Calculate layout params
-        val extWidth = row0count * elementWidth
         val extHeight = when {
             row1count > 0 -> baseBounds.height * 0.4f * 2.0f
             else -> baseBounds.height * 0.4f
         }
-        // Keep the preferred candidate over the pressed finger when space permits,
-        // but clamp the *actual rendered* panel to the keyboard viewport at Q/P edges.
-        val initialColumn = if (anchorLeft) anchorOffset else row0count - 1 - anchorOffset
-        val x = (key.visibleBounds.left + key.visibleBounds.width / 2.0f -
-            (initialColumn + 0.5f) * elementWidth)
-            .coerceIn(0.0f, (size.width - extWidth).coerceAtLeast(0.0f))
-        val y = -baseBounds.height - when {
-            row1count > 0 -> (baseBounds.height * 0.4f).toInt()
-            else -> 0
-        } + key.visibleBounds.bottom
+        // Near the top row, placing options above keyboard y=0 makes the
+        // upper row invisible or impossible to reach with the finger. Keep the
+        // extended strip inside the keyboard and hit-test that exact rectangle.
+        val y = (key.visibleBounds.bottom - baseBounds.height -
+            if (row1count > 0) baseBounds.height * 0.4f else 0.0f)
+            .coerceIn(0.0f, (size.height - extHeight).coerceAtLeast(0.0f))
         val extBounds = FlorisRect.new(
             left = x, top = y, right = x + extWidth, bottom = y + extHeight,
         )
