@@ -18,7 +18,6 @@ package dev.patrickgold.florisboard.ime.popup
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -63,17 +62,12 @@ fun PopupBaseBox(
         modifier = modifier,
     ) {
         key.label?.let { label ->
-            SnyggBox(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(key.visibleBounds.height.toDp())
-                    .align(Alignment.TopCenter),
-            ) {
-                SnyggText(
-                    modifier = Modifier.align(Alignment.Center),
-                    text = label,
-                )
-            }
+            // A compact preview places the enlarged character in the visual centre rather
+            // than using a tall empty column at the top of the popup.
+            SnyggText(
+                modifier = Modifier.align(Alignment.Center),
+                text = label,
+            )
         }
         if (shouldIndicateExtendedPopups) {
             SnyggIcon(
