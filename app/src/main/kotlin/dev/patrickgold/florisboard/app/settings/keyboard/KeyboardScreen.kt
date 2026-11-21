@@ -260,6 +260,12 @@ fun KeyboardScreen() = FlorisScreen {
         }
 
         PreferenceGroup(title = stringRes(R.string.settings__keyboard__group_toolbar)) {
+            Preference(
+                modifier = Modifier.testTag("keyboard-arrange-toolbar"),
+                title = "Arrange toolbar shortcuts",
+                summary = "Change the left-to-right order, pin a tool, or hide and restore shortcuts.",
+                onClick = { navController.navigate(Routes.Settings.ToolbarActions) },
+            )
             SwitchPreference(
                 prefs.smartbar.enabled,
                 title = stringRes(R.string.settings__keyboard__show_toolbar),

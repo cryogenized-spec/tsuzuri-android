@@ -19,8 +19,10 @@ package dev.patrickgold.florisboard.ime.smartbar.quickaction
 import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -31,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.ime.smartbar.SmartbarLayout
 import dev.patrickgold.florisboard.ime.text.keyboard.TextKeyData
@@ -48,6 +51,10 @@ internal val ToggleOverflowPanelAction = QuickAction.InsertKey(TextKeyData.TOGGL
  * icons into the pill, which reads as cluttered.
  */
 private const val MaxSecondaryRowActionCount = 6
+
+// An explicit inner gutter keeps the first and last icon out of a themed pill's rounded ends.
+// The width calculation below runs *after* this inset, so the overflow target is never clipped.
+private val SecondaryRowHorizontalInset = 6.dp
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
@@ -78,76 +85,108 @@ fun QuickActionsRow(
     val showOverflowAction = actionArrangement.stickyAction != null ||
         smartbarLayout != SmartbarLayout.SUGGESTIONS_ACTIONS_SHARED || !sharedActionsExpanded
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val width = constraints.maxWidth.toDp()
-        val height = constraints.maxHeight.toDp()
-        val isExtendedActionsRow = elementName == FlorisImeUi.SmartbarExtendedActionsRow.elementName
-        val actionButtonAspectRatio = if (isExtendedActionsRow) {
-            SecondaryQuickActionButtonAspectRatio
-        } else {
-            QuickActionButtonAspectRatio
-        }
-        val iconSizePercent by prefs.theme.toolbarIconSizePercent.collectAsState()
-        val actionIconSize = (if (isExtendedActionsRow) {
-            SecondaryQuickActionButtonIconSize
-        } else {
-            QuickActionButtonIconSize
-        }) * (iconSizePercent.coerceIn(50, 200) / 100f)
-        val actionWidth = height * actionButtonAspectRatio
-        val maxActionsToShow = if (isExtendedActionsRow) MaxSecondaryRowActionCount else Int.MAX_VALUE
-        val numActionsToShow = ((width / actionWidth).toInt() - (if (showOverflowAction) 1 else 0))
-            .coerceIn(0, maxActionsToShow)
-        val visibleActions = dynamicActions
-            .subList(0, numActionsToShow.coerceAtMost(dynamicActions.size))
-
-        SideEffect {
-            keyboardManager.smartbarVisibleDynamicActionsCount =
-                if (smartbarLayout == SmartbarLayout.ACTIONS_ONLY && actionArrangement.stickyAction != null) {
-                    numActionsToShow - 1
+    // SnyggRow consumes theme margins/borders/padding before measuring its children.
+    // Measure *inside* that surface: using outer keyboard width here can squeeze the
+    // last overflow action to a tiny target on narrow glass/Signal themes.
+    SnyggRow(
+        elementName = elementName,
+        modifier = modifier.fillMaxSize(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize().then(
+                if (elementName == FlorisImeUi.SmartbarExtendedActionsRow.elementName) {
+                    Modifier.padding(horizontal = SecondaryRowHorizontalInset)
                 } else {
-                    numActionsToShow
-                }.coerceAtLeast(0)
-        }
-
-        SnyggRow(
-            elementName = elementName,
-            modifier = Modifier.fillMaxSize(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = if (isExtendedActionsRow) Arrangement.SpaceBetween else Arrangement.SpaceEvenly,
+                    Modifier
+                }
+            ),
         ) {
-            val actionModifier = Modifier
-                .width(actionWidth)
-                .fillMaxHeight()
-            if (showOverflowAction && flipToggles) {
-                QuickActionButton(
-                    ToggleOverflowPanelAction,
-                    evaluator,
-                    modifier = actionModifier,
-                    aspectRatio = actionButtonAspectRatio,
-                    fillContainer = true,
-                    iconSize = actionIconSize,
-                )
+            val contentWidth = constraints.maxWidth.toDp()
+            val contentHeight = constraints.maxHeight.toDp()
+            val isExtendedActionsRow = elementName == FlorisImeUi.SmartbarExtendedActionsRow.elementName
+            val actionButtonAspectRatio = if (isExtendedActionsRow) {
+                SecondaryQuickActionButtonAspectRatio
+            } else {
+                QuickActionButtonAspectRatio
             }
-            for (action in visibleActions) {
-                QuickActionButton(
-                    action,
-                    evaluator,
-                    modifier = actionModifier,
-                    aspectRatio = actionButtonAspectRatio,
-                    fillContainer = true,
-                    iconSize = actionIconSize,
-                )
+            val iconSizePercent by prefs.theme.toolbarIconSizePercent.collectAsState()
+            val actionIconSize = (if (isExtendedActionsRow) {
+                SecondaryQuickActionButtonIconSize
+            } else {
+                QuickActionButtonIconSize
+            }) * (iconSizePercent.coerceIn(50, 200) / 100f)
+            val actionWidth = contentHeight * actionButtonAspectRatio
+            val maxActionsToShow = if (isExtendedActionsRow) MaxSecondaryRowActionCount else Int.MAX_VALUE
+            val numActionsToShow = visibleToolbarActionCount(
+                contentWidth = contentWidth,
+                actionWidth = actionWidth,
+                hasOverflow = showOverflowAction,
+                maxActions = maxActionsToShow,
+            )
+            val visibleActions = dynamicActions.take(numActionsToShow)
+
+            SideEffect {
+                keyboardManager.smartbarVisibleDynamicActionsCount =
+                    if (smartbarLayout == SmartbarLayout.ACTIONS_ONLY && actionArrangement.stickyAction != null) {
+                        numActionsToShow - 1
+                    } else {
+                        numActionsToShow
+                    }.coerceAtLeast(0)
             }
-            if (showOverflowAction && !flipToggles) {
-                QuickActionButton(
-                    ToggleOverflowPanelAction,
-                    evaluator,
-                    modifier = actionModifier,
-                    aspectRatio = actionButtonAspectRatio,
-                    fillContainer = true,
-                    iconSize = actionIconSize,
-                )
+
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (isExtendedActionsRow) Arrangement.SpaceBetween else Arrangement.SpaceEvenly,
+            ) {
+                val actionModifier = Modifier.width(actionWidth).fillMaxHeight()
+                if (showOverflowAction && flipToggles) {
+                    QuickActionButton(
+                        ToggleOverflowPanelAction,
+                        evaluator,
+                        modifier = actionModifier,
+                        aspectRatio = actionButtonAspectRatio,
+                        fillContainer = true,
+                        iconSize = actionIconSize,
+                    )
+                }
+                for (action in visibleActions) {
+                    QuickActionButton(
+                        action,
+                        evaluator,
+                        modifier = actionModifier,
+                        aspectRatio = actionButtonAspectRatio,
+                        fillContainer = true,
+                        iconSize = actionIconSize,
+                    )
+                }
+                if (showOverflowAction && !flipToggles) {
+                    QuickActionButton(
+                        ToggleOverflowPanelAction,
+                        evaluator,
+                        modifier = actionModifier,
+                        aspectRatio = actionButtonAspectRatio,
+                        fillContainer = true,
+                        iconSize = actionIconSize,
+                    )
+                }
             }
         }
     }
+}
+
+/**
+ * Count shortcuts from the actual content bounds, *after* theme margins/padding.
+ * Reserving one full-width slot for overflow prevents it becoming a 17dp sliver.
+ */
+internal fun visibleToolbarActionCount(
+    contentWidth: androidx.compose.ui.unit.Dp,
+    actionWidth: androidx.compose.ui.unit.Dp,
+    hasOverflow: Boolean,
+    maxActions: Int,
+): Int {
+    if (contentWidth.value <= 0f || actionWidth.value <= 0f) return 0
+    val totalFit = (contentWidth / actionWidth).toInt().coerceAtLeast(0)
+    return (totalFit - if (hasOverflow) 1 else 0).coerceIn(0, maxActions)
 }

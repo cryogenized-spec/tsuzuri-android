@@ -142,10 +142,10 @@ private suspend fun AwaitPointerEventScope.consumeUntilUp() {
 }
 
 internal const val QuickActionButtonAspectRatio = 1.1f
-internal const val SecondaryQuickActionButtonAspectRatio = 0.72f
+internal const val SecondaryQuickActionButtonAspectRatio = 1.0f
 
 internal val QuickActionButtonIconSize = 24.dp
-internal val SecondaryQuickActionButtonIconSize = 26.dp
+internal val SecondaryQuickActionButtonIconSize = 24.dp
 
 @Composable
 fun QuickActionButton(
@@ -462,6 +462,13 @@ fun QuickActionButton(
                         isAiUnavailable = aiUnavailableReason != null,
                         holdProgress = { holdProgress.value },
                         idleStyle = micIdleStyle,
+                        // A 40dp main row cannot hold a 44dp pill; the 48dp expanded
+                        // row has room for the more prominent 36dp microphone.
+                        diameter = if (aspectRatio == SecondaryQuickActionButtonAspectRatio) {
+                            36.dp
+                        } else {
+                            (FlorisImeSizing.smartbarHeight - 8.dp).coerceAtLeast(28.dp)
+                        },
                     )
                 } else when (action) {
                     is QuickAction.InsertKey -> {
@@ -605,11 +612,14 @@ private fun DictationMicPill(
     isAiUnavailable: Boolean = false,
     holdProgress: () -> Float = { 0f },
     idleStyle: MicIdleStyle = MicIdleStyle.SOLID,
+    diameter: Dp,
 ) {
     val context = LocalContext.current
     val voxtralDictationManager by context.voxtralDictationManager()
     val feedbackState by voxtralDictationManager.feedbackStateFlow.collectAsState()
-    val pillSize = (FlorisImeSizing.smartbarHeight - 8.dp).coerceAtLeast(34.dp)
+    // Match the actual row's available height. The main suggestion row is
+    // 40dp, while the expanded row has enough vertical room for a 36dp face.
+    val pillSize = diameter
     val showSuccess = feedbackState.phase == VoiceActionFeedbackPhase.SUCCESS
     val holdRingColor = rememberKeyboardAccent().color
 

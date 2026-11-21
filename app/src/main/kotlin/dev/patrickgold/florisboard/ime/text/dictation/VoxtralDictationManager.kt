@@ -150,18 +150,6 @@ class VoxtralDictationManager(
     private var activeLease: AudioSessionLease? = null
     private var operationJob: Job? = null
 
-    init {
-        // Migrate on IO and under the same host-switch lock as cloud sessions.
-        scope.launch(Dispatchers.IO) { migrateLegacyApiKeyIfNeeded() }
-        scope.launch {
-            aiAvailabilityPolicy.state.collectLatest { availability ->
-                if (availability is AiAvailability.Unavailable && activeLease != null) {
-                    cancelDictation()
-                }
-            }
-        }
-    }
-
     private val _stateFlow = MutableStateFlow(DictationState.IDLE)
     val stateFlow: StateFlow<DictationState> = _stateFlow
 
@@ -169,6 +157,58 @@ class VoxtralDictationManager(
     val recordingSessionFlow: StateFlow<RecordingSessionState?> = _recordingSessionFlow
 
     val feedbackStateFlow: StateFlow<VoiceActionFeedbackState> = feedbackController.state
+
+    // Lazy because the editor and availability flows are installed during service startup.
+    private val autoCaptureCoordinator by lazy {
+        AutoVoiceCaptureCoordinator(
+            scope = scope,
+            current = {
+                val backend = AutoVoiceCapturePolicy.backendForAuto(
+                    prefs.voxtral.dictationBackend.get(),
+                )
+                AutoVoiceCaptureContext(
+                    enabled = prefs.voxtral.autoVoiceCapture.get(),
+                    backend = backend,
+                    editorSessionId = editorInstance.activeInputSessionId,
+                    eligibleEditor = aiAvailabilityPolicy.current() is AiAvailability.Available,
+                    micPermission = hasRecordAudioPermission(),
+                    backendReady = backend != TranscriptionBackend.ORUKEET || appContext.offlineDictation().compatible,
+                    alreadyActive = _stateFlow.value != DictationState.IDLE ||
+                        operationJob?.isActive == true || activeLease != null,
+                )
+            },
+            configured = { backend ->
+                when (backend) {
+                    TranscriptionBackend.CLOUD ->
+                        kotlinx.coroutines.withContext(Dispatchers.IO) { apiKey().isNotBlank() }
+                    TranscriptionBackend.ORUKEET -> appContext.offlineDictation().awaitInitialReadiness()
+                    else -> false
+                }
+            },
+            start = ::startListening,
+        )
+    }
+
+    init {
+        // Migrate on IO and under the same host-switch lock as cloud sessions.
+        scope.launch(Dispatchers.IO) { migrateLegacyApiKeyIfNeeded() }
+        scope.launch {
+            aiAvailabilityPolicy.state.collectLatest { availability ->
+                autoCaptureCoordinator.onAvailabilityChanged(availability is AiAvailability.Available)
+                if (availability is AiAvailability.Unavailable && activeLease != null) {
+                    cancelDictation()
+                }
+            }
+        }
+    }
+
+    /**
+     * Auto capture is only attempted after a visible keyboard focus event. A later policy
+     * update retries the same focus when editor availability initially lagged Compose.
+     */
+    fun maybeAutoStartOnKeyboardFocus(eligibleEditor: Boolean) {
+        autoCaptureCoordinator.onKeyboardFocus(eligibleEditor)
+    }
 
     fun onVoiceInputKeyPressed() {
         if (aiAvailabilityPolicy.current() !is AiAvailability.Available) {
@@ -191,8 +231,12 @@ class VoxtralDictationManager(
                     DictationState.IDLE,
                     DictationState.ERROR -> startListening(currentMode)
 
-                    DictationState.LISTENING -> stopAndInsertTranscript()
-                    DictationState.PAUSED -> stopAndInsertTranscript()
+                    DictationState.LISTENING -> {
+                        stopAndInsertTranscript()
+                    }
+                    DictationState.PAUSED -> {
+                        stopAndInsertTranscript()
+                    }
                     DictationState.TRANSCRIBING -> {
                         appContext.showShortToastSync(dev.patrickgold.florisboard.R.string.ime__dictation__already_transcribing)
                     }
@@ -287,6 +331,7 @@ class VoxtralDictationManager(
     }
 
     fun cancelDictation() {
+        autoCaptureCoordinator.onUserStop()
         endLive(keepText = false)
         val lease = activeLease ?: run {
             sessionGeneration++
@@ -312,6 +357,8 @@ class VoxtralDictationManager(
         if (_stateFlow.value != DictationState.LISTENING && _stateFlow.value != DictationState.PAUSED) {
             return
         }
+        // Every Stop entry point (mic, recording row and voice-only bar) blocks auto-restart.
+        autoCaptureCoordinator.onUserStop()
         val lease = activeLease ?: return
         if (aiAvailabilityPolicy.current() !is AiAvailability.Available) {
             cancelDictation()
@@ -436,6 +483,10 @@ class VoxtralDictationManager(
     }
 
     fun invalidateSession(reason: AudioSessionInvalidation) {
+        autoCaptureCoordinator.onSessionInvalidated(
+            keyboardHidden = reason == AudioSessionInvalidation.KEYBOARD_HIDE ||
+                reason == AudioSessionInvalidation.IME_TEARDOWN,
+        )
         endLive(keepText = true)
         sessionGeneration++
         autoStopJob?.cancel(); autoStopJob = null
