@@ -326,8 +326,9 @@ class PopupUiController(
         // The older un-clamped anchor arithmetic could highlight a different symbol
         // from the one under the finger, especially at the screen edges.
         val hitIndex = popupHitIndex(
-            pointerX = xEvent + key.visibleBounds.left,
-            pointerY = yEvent + key.visibleBounds.top,
+            // Motion events here are already in keyboard-local coordinates.
+            pointerX = xEvent,
+            pointerY = yEvent,
             boundsLeft = rendered.bounds.left,
             boundsTop = rendered.bounds.top,
             cellWidth = rendered.bounds.width / rendered.row0count,
