@@ -609,7 +609,9 @@ private fun DictationMicPill(
     val context = LocalContext.current
     val voxtralDictationManager by context.voxtralDictationManager()
     val feedbackState by voxtralDictationManager.feedbackStateFlow.collectAsState()
-    val pillSize = (FlorisImeSizing.smartbarHeight - 8.dp).coerceAtLeast(34.dp)
+    // The extended toolbar has a larger slot than the suggestion row. Keep the mic
+    // face large enough to remain an obvious control rather than an accent-coloured dot.
+    val pillSize = (FlorisImeSizing.smartbarHeight - 4.dp).coerceAtLeast(36.dp)
     val showSuccess = feedbackState.phase == VoiceActionFeedbackPhase.SUCCESS
     val holdRingColor = rememberKeyboardAccent().color
 
